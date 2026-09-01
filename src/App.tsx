@@ -1,0 +1,676 @@
+import { useState, useEffect, ChangeEvent } from "react";
+import { EditorControlsState, DimensionState, TileData, Point2D } from "./types";
+import { getSampleTiles } from "./data/sampleTiles";
+import { generateProceduralRoomImage } from "./data/sampleRoom";
+import { createTilePatternSheet } from "./services/tileRenderingService";
+import Header from "./components/Header";
+import VisualizationCanvas from "./components/VisualizationCanvas";
+import { Upload, Plus, Heart, HelpCircle, Check, Sparkles } from "lucide-react";
+
+const INITIAL_POINTS: Point2D[] = [
+  { x: 0.18, y: 0.62, label: "top-left" },
+  { x: 0.82, y: 0.62, label: "top-right" },
+  { x: 0.98, y: 0.95, label: "bottom-right" },
+  { x: 0.02, y: 0.95, label: "bottom-left" },
+];
+
+const DEFAULT_CONTROLS: EditorControlsState = {
+  surfaceType: "floor",
+  detectionMode: "manual",
+  tileId: "majolica-blue",
+  tileSizeScale: 1.0,
+  tileRotation: 0,
+  tilePattern: "straight",
+  groutWidthMm: 3,
+  groutColor: "#E2E8F0",
+  brightness: 1.0,
+  contrast: 1.0,
+  opacity: 0.88,
+  shadow: 0.7,
+  reflection: 0.4,
+  textureIntensity: 1.0,
+  perspectiveStrength: 1.0,
+  offsetX: 0,
+  offsetY: 0,
+  scale: 1.0,
+};
+
+export default function App() {
+  // Main states
+  const [roomImage, setRoomImage] = useState<string | null>(null);
+  const [tiles, setTiles] = useState<TileData[]>([]);
+  const [selectedTileId, setSelectedTileId] = useState<string>("majolica-blue");
+  const [points, setPoints] = useState<Point2D[]>(INITIAL_POINTS);
+  const [controls, setControls] = useState<EditorControlsState>(DEFAULT_CONTROLS);
+
+  // Layout states
+  const [roomWidthFt, setRoomWidthFt] = useState<number>(15);
+  const [roomLengthFt, setRoomLengthFt] = useState<number>(12);
+  const [selectedTileSize, setSelectedTileSize] = useState<"2x2" | "1x2">("2x2");
+  const [groutColorIndex, setGroutColorIndex] = useState<number>(30); // mapped to slider
+  const [isWall, setIsWall] = useState<boolean>(false);
+
+  // UI state overlays
+  const [showNotification, setShowNotification] = useState<string | null>(null);
+  const [showOrderModal, setShowOrderModal] = useState<boolean>(false);
+
+  // Offscreen rendering caching
+  const [tilePatternSheet, setTilePatternSheet] = useState<HTMLCanvasElement | null>(null);
+
+  // Populate tiles and pre-load Scandinavian sofa room with Majolica blue tiles by default
+  useEffect(() => {
+    const initializedTiles = getSampleTiles();
+    setTiles(initializedTiles);
+
+    const demoRoom = generateProceduralRoomImage();
+    setRoomImage(demoRoom);
+    setSelectedTileId("majolica-blue");
+    setPoints(INITIAL_POINTS);
+  }, []);
+
+  const selectedTile = tiles.find((t) => t.id === selectedTileId) || null;
+
+  // React to grout color index slider changes and update grout HEX
+  useEffect(() => {
+    // Map index 0-100 to an elegant greyscale range from dark carbon to light grey/white
+    const brightnessValue = Math.floor(255 - (groutColorIndex * 1.8));
+    const hexSegment = brightnessValue.toString(16).padStart(2, "0");
+    const hexColor = `#${hexSegment}${hexSegment}${hexSegment}`;
+    setControls((prev) => ({
+      ...prev,
+      groutColor: hexColor,
+    }));
+  }, [groutColorIndex]);
+
+  // Sync surfaceType with toggle
+  useEffect(() => {
+    setControls((prev) => ({
+      ...prev,
+      surfaceType: isWall ? "wall" : "floor",
+    }));
+  }, [isWall]);
+
+  // Sync tile sizes inside visualization engine
+  useEffect(() => {
+    if (selectedTileSize === "2x2") {
+      setControls((prev) => ({ ...prev, scale: 0.95 }));
+    } else {
+      setControls((prev) => ({ ...prev, scale: 0.75 }));
+    }
+  }, [selectedTileSize]);
+
+  // Compute offscreen flat seamless tile sheet
+  useEffect(() => {
+    if (!selectedTile) return;
+
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.referrerPolicy = "no-referrer";
+    img.src = selectedTile.imageUrl;
+    img.onload = () => {
+      // Scale standard physical sizes (mm) to pixels
+      const basePxWidth = (selectedTile.widthMm / 100) * 15;
+      const basePxHeight = (selectedTile.heightMm / 100) * 15;
+
+      const sheet = createTilePatternSheet(
+        img,
+        controls.tilePattern,
+        basePxWidth,
+        basePxHeight,
+        controls.groutWidthMm,
+        controls.groutColor,
+        controls.tileRotation
+      );
+      setTilePatternSheet(sheet);
+    };
+  }, [selectedTile, controls.tilePattern, controls.groutWidthMm, controls.groutColor, controls.tileRotation]);
+
+  // Handle uploaded room photograph
+  const handleUploadRoomImage = (e: ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setRoomImage(event.target.result as string);
+          setPoints(INITIAL_POINTS);
+          triggerNotification("Room image uploaded successfully!");
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Handle uploaded custom tile
+  const handleUploadCustomTile = (e: ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          const newTile: TileData = {
+            id: `custom-${Date.now()}`,
+            name: file.name.split(".")[0] || "Custom Uploaded",
+            category: "custom",
+            imageUrl: event.target.result as string,
+            widthMm: selectedTileSize === "2x2" ? 600 : 300,
+            heightMm: 600,
+            colorStyle: "User uploaded custom design",
+          };
+          setTiles((prev) => [newTile, ...prev]);
+          setSelectedTileId(newTile.id);
+          triggerNotification("Custom tile pattern added successfully!");
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const triggerNotification = (message: string) => {
+    setShowNotification(message);
+    setTimeout(() => {
+      setShowNotification(null);
+    }, 4000);
+  };
+
+  // Mathematical tile calculations
+  const totalAreaSqFt = roomWidthFt * roomLengthFt;
+  const tileCoverageSqFt = selectedTileSize === "2x2" ? 4 : 2; // 2x2 = 4 sqft, 1x2 = 2 sqft
+  const requiredTilesCount = Math.ceil(totalAreaSqFt / tileCoverageSqFt);
+
+  // App-level resets matching 'New Project'
+  const handleResetWorkspace = () => {
+    const demoRoom = generateProceduralRoomImage();
+    setRoomImage(demoRoom);
+    setSelectedTileId("majolica-blue");
+    setRoomWidthFt(15);
+    setRoomLengthFt(12);
+    setSelectedTileSize("2x2");
+    setGroutColorIndex(30);
+    setIsWall(false);
+    setPoints(INITIAL_POINTS);
+    setControls(DEFAULT_CONTROLS);
+    triggerNotification("New workspace initialized!");
+  };
+
+  const handleSaveWorkspace = () => {
+    triggerNotification("Workspace configuration saved successfully!");
+  };
+
+  const handleShareWorkspace = () => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(window.location.href);
+      triggerNotification("Share link copied to clipboard!");
+    } else {
+      triggerNotification("Share configuration generated!");
+    }
+  };
+
+  return (
+    <div className="bg-[#B1D4CC] min-h-screen flex flex-col font-sans selection:bg-[#1D4A3F] selection:text-white" id="tilevista-app">
+      {/* 1. Header with English Navigation & Custom Branding */}
+      <Header
+        onReset={handleResetWorkspace}
+        onSave={handleSaveWorkspace}
+        onShare={handleShareWorkspace}
+      />
+
+      {/* Floating alert notifications */}
+      {showNotification && (
+        <div className="fixed top-20 right-6 z-50 bg-[#1D4A3F] text-white px-5 py-3.5 rounded-2xl shadow-xl flex items-center gap-2.5 animate-bounce text-xs font-bold border border-emerald-500/30">
+          <Sparkles className="w-4 h-4 text-[#F19A3E]" />
+          <span>{showNotification}</span>
+        </div>
+      )}
+
+      {/* 2. Responsive 3-Column Studio Workspace Grid */}
+      <main className="flex-1 w-full max-w-[1440px] mx-auto p-4 sm:p-5 md:p-6 lg:p-8 grid grid-cols-1 md:grid-cols-12 gap-5 lg:gap-6 items-start" id="tilevista-editor-stage">
+        
+        {/* ================= COLUMN 1: DESIGN PANEL (Sidebar Controls) ================= */}
+        <section className="md:col-span-4 lg:col-span-3 space-y-5 flex flex-col" id="col-design-panel">
+          
+          <div className="flex items-center justify-between px-1" id="panel-title-bar">
+            <h2 className="text-xl font-extrabold text-neutral-900 tracking-tight flex items-center gap-2">
+              Design Panel
+            </h2>
+          </div>
+
+          {/* Step 1: Define Space */}
+          <div className="bg-[#FAF9F6] rounded-2xl p-5 shadow-sm border border-neutral-200/40 space-y-4" id="step-1-card">
+            <div className="bg-[#FFAA47]/15 text-[#D06F00] px-3.5 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5" id="step-1-eyebrow">
+              <span className="w-2 h-2 rounded-full bg-[#FFAA47]" />
+              Step 1: Define Space
+            </div>
+
+            {/* Toggle tabs for file upload vs dimensions */}
+            <div className="grid grid-cols-2 gap-1.5 bg-neutral-100 p-1 rounded-xl" id="tab-controls">
+              <button
+                className="py-2 text-xs font-bold rounded-lg transition-all text-neutral-800 bg-white shadow-sm cursor-default"
+                id="tab-photo-btn"
+              >
+                Upload Photo
+              </button>
+              <button
+                onClick={() => triggerNotification("Adjust space limits below to auto-calculate tile quantity")}
+                className="py-2 text-xs font-bold rounded-lg text-neutral-500 hover:text-neutral-800 transition-all cursor-pointer"
+                id="tab-dimension-btn"
+              >
+                Dimensions
+              </button>
+            </div>
+
+            {/* Room upload container block */}
+            <div className="border border-neutral-200 bg-white rounded-xl p-3 flex items-center gap-3" id="photo-uploader-box">
+              <div className="relative w-12 h-12 bg-neutral-100 rounded-lg overflow-hidden border border-neutral-150 shrink-0" id="uploader-preview">
+                {roomImage ? (
+                  <img src={roomImage} alt="Room" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-neutral-400">
+                    <Upload className="w-4 h-4" />
+                  </div>
+                )}
+              </div>
+              <div className="flex-1 overflow-hidden">
+                <span className="block text-[9px] font-bold text-neutral-400 uppercase tracking-wider">Room Context</span>
+                <span className="block text-xs font-bold text-neutral-800 truncate">Room Image</span>
+                <label className="text-[10px] text-[#207868] font-bold underline cursor-pointer mt-0.5 block hover:text-[#165549]">
+                  Choose raw photo
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleUploadRoomImage}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </div>
+
+            {/* Room dimension fields (Width in feet, Length in feet) */}
+            <div className="grid grid-cols-2 gap-3" id="dimension-inputs-grid">
+              <div className="space-y-1">
+                <label className="block text-[9px] font-extrabold text-neutral-500 uppercase">Width (ft)</label>
+                <input
+                  type="number"
+                  min="2"
+                  max="50"
+                  value={roomWidthFt}
+                  onChange={(e) => setRoomWidthFt(parseInt(e.target.value) || 15)}
+                  className="w-full bg-white border border-neutral-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-neutral-800 focus:outline-none focus:border-[#207868]"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="block text-[9px] font-extrabold text-neutral-500 uppercase">Length (ft)</label>
+                <input
+                  type="number"
+                  min="2"
+                  max="50"
+                  value={roomLengthFt}
+                  onChange={(e) => setRoomLengthFt(parseInt(e.target.value) || 12)}
+                  className="w-full bg-white border border-neutral-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-neutral-800 focus:outline-none focus:border-[#207868]"
+                />
+              </div>
+            </div>
+
+            {/* Room update trigger button */}
+            <button
+              onClick={() => triggerNotification("Dimensions updated successfully!")}
+              className="w-full bg-[#2A7B6B] hover:bg-[#1D5E51] text-white py-2.5 rounded-xl text-xs font-extrabold shadow-sm transition-all active:scale-95 cursor-pointer"
+              id="room-update-btn"
+            >
+              Update Dimensions
+            </button>
+          </div>
+
+          {/* Step 2: Tile Selection */}
+          <div className="bg-[#FAF9F6] rounded-2xl p-5 shadow-sm border border-neutral-200/40 space-y-4" id="step-2-card">
+            <div className="bg-[#FFAA47]/15 text-[#D06F00] px-3.5 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-[#FFAA47]" />
+              Step 2: Choose Design
+            </div>
+
+            {/* Dash block for custom upload */}
+            <label className="border-2 border-dashed border-neutral-300 rounded-xl p-3 flex flex-col items-center justify-center text-center cursor-pointer hover:border-neutral-400 bg-white transition-all text-neutral-500" id="tile-upload-box">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleUploadCustomTile}
+                className="hidden"
+              />
+              <Upload className="w-5 h-5 text-neutral-400 mb-1" />
+              <span className="text-xs font-bold text-neutral-700">Upload Custom Tile</span>
+            </label>
+
+            {/* Miniature list selection for visual consistency */}
+            <div className="grid grid-cols-4 gap-2" id="miniature-tile-catalog">
+              {tiles.slice(0, 4).map((tile) => (
+                <button
+                  key={tile.id}
+                  onClick={() => setSelectedTileId(tile.id)}
+                  className={`relative aspect-square rounded-lg overflow-hidden border transition-all cursor-pointer ${
+                    selectedTileId === tile.id
+                      ? "border-[#1D4A3F] ring-2 ring-[#207868]/30"
+                      : "border-neutral-200 hover:border-neutral-300"
+                  }`}
+                  title={tile.name}
+                >
+                  <img src={tile.imageUrl} alt={tile.name} className="w-full h-full object-cover" />
+                  {selectedTileId === tile.id && (
+                    <div className="absolute inset-0 bg-[#207868]/15 flex items-center justify-center">
+                      <div className="w-4 h-4 rounded-full bg-[#207868] text-white flex items-center justify-center text-[8px] font-bold">✓</div>
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* Tile size selector buttons "2x2" and "1x2 feet" */}
+            <div className="space-y-1.5" id="tile-size-selector">
+              <label className="block text-[9px] font-extrabold text-neutral-500 uppercase">Tile Aspect Ratio</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setSelectedTileSize("2x2")}
+                  className={`py-2 text-xs font-bold rounded-lg border text-center transition-all cursor-pointer ${
+                    selectedTileSize === "2x2"
+                      ? "bg-[#1D4A3F] text-white border-[#1D4A3F]"
+                      : "bg-white text-neutral-700 border-neutral-200 hover:border-neutral-300"
+                  }`}
+                  id="size-2x2-btn"
+                >
+                  2x2 ft (60x60)
+                </button>
+                <button
+                  onClick={() => setSelectedTileSize("1x2")}
+                  className={`py-2 text-xs font-bold rounded-lg border text-center transition-all cursor-pointer ${
+                    selectedTileSize === "1x2"
+                      ? "bg-[#1D4A3F] text-white border-[#1D4A3F]"
+                      : "bg-white text-neutral-700 border-neutral-200 hover:border-neutral-300"
+                  }`}
+                  id="size-1x2-btn"
+                >
+                  1x2 ft (30x60)
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Step 3: Alignments & Grout settings */}
+          <div className="bg-[#FAF9F6] rounded-2xl p-5 shadow-sm border border-neutral-200/40 space-y-4" id="step-3-card">
+            <div className="bg-[#FFAA47]/15 text-[#D06F00] px-3.5 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-[#FFAA47]" />
+              Step 3: Setup & Adjustments
+            </div>
+
+            {/* Grout color slider "Grout Color" */}
+            <div className="space-y-1">
+              <div className="flex justify-between items-center text-[9px] font-extrabold text-neutral-500 uppercase">
+                <span>Grout Color</span>
+                <span className="text-neutral-900 font-extrabold text-[10px]">{controls.groutColor}</span>
+              </div>
+              <div className="flex items-center gap-3 bg-white p-2.5 rounded-xl border border-neutral-200/60">
+                <input
+                  type="range"
+                  min="5"
+                  max="90"
+                  value={groutColorIndex}
+                  onChange={(e) => setGroutColorIndex(parseInt(e.target.value))}
+                  className="w-full h-1 bg-neutral-200 rounded-lg appearance-none cursor-pointer accent-[#1D4A3F]"
+                />
+              </div>
+            </div>
+
+            {/* Tile rotation slider "Tile Angle" */}
+            <div className="space-y-1">
+              <div className="flex justify-between items-center text-[9px] font-extrabold text-neutral-500 uppercase">
+                <span>Tile Angle</span>
+                <span className="text-neutral-900 font-extrabold text-[10px]">{controls.tileRotation}°</span>
+              </div>
+              <div className="flex items-center gap-3 bg-white p-2.5 rounded-xl border border-neutral-200/60">
+                <input
+                  type="range"
+                  min="0"
+                  max="360"
+                  value={controls.tileRotation}
+                  onChange={(e) => setControls((prev) => ({ ...prev, tileRotation: parseInt(e.target.value) }))}
+                  className="w-full h-1 bg-neutral-200 rounded-lg appearance-none cursor-pointer accent-[#1D4A3F]"
+                />
+              </div>
+            </div>
+
+            {/* Surface type toggle "Wall or Floor?" */}
+            <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-neutral-200/60" id="wall-floor-toggle">
+              <span className="text-xs font-bold text-neutral-700">Wall or Floor?</span>
+              <button
+                onClick={() => setIsWall(!isWall)}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  isWall ? "bg-[#1D4A3F]" : "bg-neutral-300"
+                }`}
+                id="toggle-switch"
+                title={isWall ? "Currently Wall" : "Currently Floor"}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                    isWall ? "translate-x-5" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* Button Apply Visuals */}
+            <button
+              onClick={() => triggerNotification("Visual calculations applied successfully!")}
+              className="w-full bg-[#1F7464] hover:bg-[#165549] text-white py-3 rounded-xl text-xs font-extrabold shadow-sm transition-all active:scale-95 cursor-pointer"
+              id="see-results-btn"
+            >
+              Apply Visuals
+            </button>
+          </div>
+        </section>
+
+        {/* ================= COLUMN 2: TILE CATALOG (Middle Selection) ================= */}
+        <section className="md:col-span-4 lg:col-span-3 space-y-5 flex flex-col" id="col-catalog-panel">
+          <div className="flex items-center justify-between px-1">
+            <h2 className="text-xl font-extrabold text-neutral-900 tracking-tight">Tile Catalog</h2>
+          </div>
+
+          <div className="bg-[#FAF9F6] rounded-2xl p-5 shadow-sm border border-neutral-200/40 space-y-4 flex-1" id="middle-catalog-card">
+            <div className="bg-[#FFAA47]/15 text-[#D06F00] px-3.5 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-[#FFAA47]" />
+              Tile Varieties
+            </div>
+
+            {/* Upload your design custom button box */}
+            <label className="border-2 border-dashed border-neutral-300 rounded-xl p-4 flex flex-col items-center justify-center text-center cursor-pointer hover:border-neutral-400 bg-white transition-all text-neutral-500 mb-2" id="catalog-upload-box">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleUploadCustomTile}
+                className="hidden"
+              />
+              <Upload className="w-5 h-5 text-neutral-400 mb-1" />
+              <span className="text-xs font-bold text-neutral-700">Import Custom Design</span>
+            </label>
+
+            {/* Expanded elegant Grid of Tile choices with categories and labels */}
+            <div className="grid grid-cols-2 gap-3 max-h-[460px] overflow-y-auto pr-1" id="expanded-tile-grid">
+              {tiles.map((tile) => (
+                <button
+                  key={tile.id}
+                  onClick={() => setSelectedTileId(tile.id)}
+                  className={`relative p-2 rounded-xl border text-left bg-white transition-all overflow-hidden flex flex-col justify-between aspect-square group cursor-pointer ${
+                    selectedTileId === tile.id
+                      ? "border-[#1D4A3F] ring-2 ring-[#207868]/15 shadow-md"
+                      : "border-neutral-200/80 hover:border-neutral-350"
+                  }`}
+                  id={`expanded-tile-${tile.id}`}
+                >
+                  <div className="relative w-full aspect-square rounded-lg overflow-hidden bg-neutral-50 border border-neutral-100">
+                    <img
+                      src={tile.imageUrl}
+                      alt={tile.name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                    <span className="absolute bottom-1 right-1 bg-white/95 backdrop-blur-sm px-1.5 py-0.5 rounded text-[8px] font-bold text-neutral-700 border border-neutral-150">
+                      {tile.widthMm === 600 && tile.heightMm === 600 ? "60x60 cm" : "30x60 cm"}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 overflow-hidden">
+                    <span className="block text-[8px] text-[#207868] font-bold uppercase tracking-wider">{tile.category}</span>
+                    <h4 className="text-[10px] font-bold text-neutral-900 truncate leading-none mt-0.5">{tile.name}</h4>
+                  </div>
+                  {selectedTileId === tile.id && (
+                    <div className="absolute top-1.5 left-1.5 bg-[#1D4A3F] text-white rounded-full p-0.5 shadow-md">
+                      <Check className="w-3 h-3" />
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ================= COLUMN 3: LIVE VISUALIZER (Main Output Canvas) ================= */}
+        <section className="md:col-span-8 lg:col-span-6 space-y-5 flex flex-col" id="col-results-panel">
+          <div className="flex items-center justify-between px-1">
+            <h2 className="text-xl font-extrabold text-neutral-900 tracking-tight">Live Visualizer</h2>
+          </div>
+
+          <div className="bg-[#FAF9F6] rounded-2xl p-4 shadow-sm border border-neutral-200/40 flex flex-col justify-between min-h-[450px] sm:min-h-[500px]" id="visualization-canvas-card">
+            
+            {/* Embedded interactive perspective canvas */}
+            <div className="flex-1 w-full bg-neutral-950 rounded-xl overflow-hidden shadow-inner relative flex items-center justify-center min-h-[350px] sm:min-h-[400px]">
+              {roomImage ? (
+                <VisualizationCanvas
+                  roomImageSrc={roomImage}
+                  tilePatternSheet={tilePatternSheet}
+                  points={points}
+                  onPointsChange={setPoints}
+                  controls={controls}
+                  showComparisonSlider={false}
+                  comparisonProgress={50}
+                  showAfterOnly={false}
+                />
+              ) : (
+                <div className="text-center text-neutral-400 p-8 flex flex-col items-center">
+                  <div className="w-12 h-12 rounded-full bg-neutral-800 flex items-center justify-center mb-4 text-neutral-300">
+                    <Upload className="w-5 h-5" />
+                  </div>
+                  <p className="text-sm font-bold">Please upload a room image</p>
+                </div>
+              )}
+            </div>
+
+            {/* Bottom calculation bar containing dimensions and order actions */}
+            <div className="mt-4 pt-3 border-t border-neutral-200/60 flex flex-col sm:flex-row items-center justify-between gap-4 px-2" id="results-footer-bar">
+              <div className="flex items-center gap-6" id="metrics-summary">
+                {/* Room Size Display */}
+                <div>
+                  <span className="block text-[9px] font-extrabold text-neutral-400 uppercase tracking-wider">Room Area</span>
+                  <p className="text-sm font-black text-neutral-800 mt-0.5" id="size-metric-display">
+                    {roomLengthFt} x {roomWidthFt} ft
+                  </p>
+                </div>
+                {/* Required Tiles Count Display */}
+                <div>
+                  <span className="block text-[9px] font-extrabold text-neutral-400 uppercase tracking-wider">Estimated Tiles</span>
+                  <p className="text-sm font-black text-[#1D4A3F] mt-0.5" id="tiles-count-display">
+                    {requiredTilesCount} pcs
+                  </p>
+                </div>
+              </div>
+
+              {/* Order action button */}
+              <button
+                onClick={() => setShowOrderModal(true)}
+                className="w-full sm:w-auto px-6 py-2.5 bg-[#207868] hover:bg-[#196053] rounded-xl text-xs font-extrabold text-white transition-all shadow-sm active:scale-95 cursor-pointer"
+                id="order-now-btn"
+              >
+                Generate Order
+              </button>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      {/* ================= ORDER QUOTATION MODAL ================= */}
+      {showOrderModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs" id="order-modal-overlay">
+          <div className="bg-[#FAF9F6] rounded-3xl p-6 md:p-8 max-w-md w-full border border-neutral-200 shadow-2xl space-y-6 animate-in fade-in zoom-in duration-200">
+            <div className="flex items-start justify-between">
+              <div>
+                <span className="text-[9px] bg-[#207868]/10 text-[#207868] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">Tile Quotation</span>
+                <h3 className="text-lg font-black text-neutral-900 mt-2">Order Confirmation</h3>
+              </div>
+              <button
+                onClick={() => setShowOrderModal(false)}
+                className="text-neutral-400 hover:text-neutral-700 font-extrabold text-xl p-1 shrink-0"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="bg-white rounded-2xl p-4.5 border border-neutral-200/60 space-y-3.5 text-xs">
+              <div className="flex justify-between border-b border-neutral-100 pb-2">
+                <span className="text-neutral-500 font-medium">Selected Tile Pattern:</span>
+                <span className="font-extrabold text-neutral-800 truncate max-w-[200px]">
+                  {selectedTile?.name || "Majolica Portuguese"}
+                </span>
+              </div>
+              <div className="flex justify-between border-b border-neutral-100 pb-2">
+                <span className="text-neutral-500 font-medium">Room Total Space:</span>
+                <span className="font-extrabold text-neutral-800">
+                  {totalAreaSqFt} sq ft ({roomLengthFt} x {roomWidthFt} ft)
+                </span>
+              </div>
+              <div className="flex justify-between border-b border-neutral-100 pb-2">
+                <span className="text-neutral-500 font-medium">Tile Size:</span>
+                <span className="font-extrabold text-neutral-800">
+                  {selectedTileSize === "2x2" ? "2x2 ft (60x60 cm)" : "1x2 ft (30x60 cm)"}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm pt-1">
+                <span className="text-neutral-900 font-extrabold">Total Required Tiles:</span>
+                <span className="font-black text-[#207868] text-base">{requiredTilesCount} pcs</span>
+              </div>
+            </div>
+
+            <p className="text-[10.5px] text-neutral-400 leading-normal">
+              * Note: This is an estimated layout calculation. Actual field cutting wastage buffers might vary based on your room corners. Powered by traditional craftsmanship from the Rajshahi Ceramics & Sculpture community.
+            </p>
+
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <button
+                onClick={() => setShowOrderModal(false)}
+                className="w-full bg-neutral-100 hover:bg-neutral-200 text-neutral-700 py-3 rounded-xl text-xs font-extrabold transition-all active:scale-95 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setShowOrderModal(false);
+                  triggerNotification("Your quotation request was submitted successfully!");
+                }}
+                className="w-full bg-[#207868] hover:bg-[#196053] text-white py-3 rounded-xl text-xs font-extrabold transition-all active:scale-95 cursor-pointer"
+              >
+                Submit Order
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Personalized English academic footer dedicated to Ceramics & Sculpture Department */}
+      <footer className="bg-[#FAF9F6] border-t border-neutral-100 px-6 py-5 text-center text-neutral-400 text-xs mt-auto" id="tilevista-footer">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+          <p>© 2026 TileVista. Visualise with Absolute Precision. Decide with Certainty.</p>
+          <div className="flex items-center gap-2 text-[11px] font-bold text-neutral-600" id="academic-credit">
+            <span>Portfolio Project • Saima Biva</span>
+            <span className="text-neutral-300">|</span>
+            <span className="text-neutral-500 font-extrabold">Department of Ceramics & Sculpture</span>
+            <span className="text-neutral-300">|</span>
+            <span className="text-neutral-600 bg-neutral-200/60 px-2 py-0.5 rounded border border-neutral-300/40">University of Rajshahi</span>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}
