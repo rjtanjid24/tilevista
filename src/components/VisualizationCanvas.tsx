@@ -5,6 +5,7 @@ import { Maximize, HelpCircle, Eye, Download } from "lucide-react";
 
 interface VisualizationCanvasProps {
   roomImageSrc: string | null;
+  roomOverlaySrc?: string | null;
   tilePatternSheet: HTMLCanvasElement | null;
   points: Point2D[];
   onPointsChange: (newPoints: Point2D[]) => void;
@@ -17,6 +18,7 @@ interface VisualizationCanvasProps {
 
 export default function VisualizationCanvas({
   roomImageSrc,
+  roomOverlaySrc = null,
   tilePatternSheet,
   points,
   onPointsChange,
@@ -29,7 +31,9 @@ export default function VisualizationCanvas({
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const roomImageRef = useRef<HTMLImageElement | null>(null);
+  const roomOverlayRef = useRef<HTMLImageElement | null>(null);
 
+  const [imagesLoaded, setImagesLoaded] = useState(0);
   const [activeHandleIndex, setActiveHandleIndex] = useState<number | null>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
   const [isHoveringHandle, setIsHoveringHandle] = useState<number | null>(null);
@@ -48,8 +52,26 @@ export default function VisualizationCanvas({
     img.onload = () => {
       roomImageRef.current = img;
       handleResize();
+      setImagesLoaded((prev) => prev + 1);
     };
   }, [roomImageSrc]);
+
+  // Load the room transparent overlay image
+  useEffect(() => {
+    if (!roomOverlaySrc) {
+      roomOverlayRef.current = null;
+      setImagesLoaded((prev) => prev + 1);
+      return;
+    }
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.referrerPolicy = "no-referrer";
+    img.src = roomOverlaySrc;
+    img.onload = () => {
+      roomOverlayRef.current = img;
+      setImagesLoaded((prev) => prev + 1);
+    };
+  }, [roomOverlaySrc]);
 
   // Handle canvas sizing dynamically on window or container resize
   const handleResize = () => {
@@ -248,6 +270,12 @@ export default function VisualizationCanvas({
 
     ctx.restore(); // Restores clip state
 
+    // 5.5 Draw high-fidelity transparent furniture and wall trim overlay on top of tiles
+    const roomOverlayImg = roomOverlayRef.current;
+    if (roomOverlayImg) {
+      ctx.drawImage(roomOverlayImg, 0, 0, dimensions.width, dimensions.height);
+    }
+
     // 6. Draw comparison dividing bar if slider is active
     if (showComparisonSlider && !showAfterOnly) {
       ctx.strokeStyle = "#FFFFFF";
@@ -332,7 +360,7 @@ export default function VisualizationCanvas({
         }
       });
     }
-  }, [dimensions, points, tilePatternSheet, controls, comparisonProgress, showComparisonSlider, showAfterOnly, activeHandleIndex, isHoveringHandle]);
+  }, [dimensions, points, tilePatternSheet, controls, comparisonProgress, showComparisonSlider, showAfterOnly, activeHandleIndex, isHoveringHandle, imagesLoaded]);
 
   // Handle pointer interactions
   const getMouseCoords = (e: React.MouseEvent | React.TouchEvent) => {
@@ -444,16 +472,170 @@ export default function VisualizationCanvas({
   };
 
   const handleDownload = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const roomImg = roomImageRef.current;
+    if (!roomImg) return;
+
     try {
-      const dataUrl = canvas.toDataURL("image/png");
+      // exact 8K UHD widescreen resolution (7680 x 4320)
+      const width = 7680;
+      const height = 4320;
+
+      // Create high-res offscreen canvas
+      const exportCanvas = document.createElement("canvas");
+      exportCanvas.width = width;
+      exportCanvas.height = height;
+      const ctx = exportCanvas.getContext("2d");
+      if (!ctx) return;
+
+      // Set high-quality image smoothing
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+
+      // 1. Draw high-res base room background (walls and empty floor)
+      ctx.drawImage(roomImg, 0, 0, width, height);
+
+      // 2. Render high-res tile layer
+      // Crucial: No editing lines, helper markers, or corner gridlines are drawn in the final download output.
+      if (tilePatternSheet && points.length === 4) {
+        // Calculate high-res absolute point vertices
+        const pAbs = points.map((p) => ({
+          x: p.x * width,
+          y: p.y * height,
+        }));
+
+        // 32x32 Grid subdivision for ultra-fine perspective warping and razor-sharp tile edges in 8K
+        const gridCount = 32;
+
+        const tileLayerCanvas = document.createElement("canvas");
+        tileLayerCanvas.width = width;
+        tileLayerCanvas.height = height;
+        const tCtx = tileLayerCanvas.getContext("2d");
+
+        if (tCtx) {
+          for (let j = 0; j < gridCount; j++) {
+            for (let i = 0; i < gridCount; i++) {
+              const s0 = i / gridCount;
+              const s1 = (i + 1) / gridCount;
+              const t0 = j / gridCount;
+              const t1 = (j + 1) / gridCount;
+
+              // Interpolate high-res target vertices
+              const tTL = interpolateQuad(pAbs[0], pAbs[1], pAbs[2], pAbs[3], s0, t0);
+              const tTR = interpolateQuad(pAbs[0], pAbs[1], pAbs[2], pAbs[3], s1, t0);
+              const tBR = interpolateQuad(pAbs[0], pAbs[1], pAbs[2], pAbs[3], s1, t1);
+              const tBL = interpolateQuad(pAbs[0], pAbs[1], pAbs[2], pAbs[3], s0, t1);
+
+              // Pattern source mapping coordinates matching selected design configurations
+              const sc = controls.scale;
+              const ox = controls.offsetX * 2;
+              const oy = controls.offsetY * 2;
+
+              const u0 = s0 * 1024 * sc + ox;
+              const u1 = s1 * 1024 * sc + ox;
+              const v0 = t0 * 1024 * sc + oy;
+              const v1 = t1 * 1024 * sc + oy;
+
+              // Triangle A
+              drawTriangleTexture(
+                tCtx,
+                tilePatternSheet,
+                u0, v0,
+                u1, v0,
+                u0, v1,
+                tTL.x, tTL.y,
+                tTR.x, tTR.y,
+                tBL.x, tBL.y
+              );
+
+              // Triangle B
+              drawTriangleTexture(
+                tCtx,
+                tilePatternSheet,
+                u1, v0,
+                u1, v1,
+                u0, v1,
+                tTR.x, tTR.y,
+                tBR.x, tBR.y,
+                tBL.x, tBL.y
+              );
+            }
+          }
+
+          // Render tiles to master context with opacity adjustments
+          ctx.save();
+          ctx.globalAlpha = controls.opacity;
+          ctx.drawImage(tileLayerCanvas, 0, 0);
+          ctx.restore();
+
+          // 3. Render High-Res Shadows
+          if (controls.shadow > 0) {
+            ctx.save();
+            ctx.globalCompositeOperation = "multiply";
+            ctx.globalAlpha = controls.shadow * 0.85;
+
+            ctx.beginPath();
+            ctx.moveTo(pAbs[0].x, pAbs[0].y);
+            ctx.lineTo(pAbs[1].x, pAbs[1].y);
+            ctx.lineTo(pAbs[2].x, pAbs[2].y);
+            ctx.lineTo(pAbs[3].x, pAbs[3].y);
+            ctx.closePath();
+            ctx.clip();
+
+            ctx.drawImage(roomImg, 0, 0, width, height);
+            ctx.restore();
+          }
+
+          // 4. Render High-Res Reflections
+          if (controls.reflection > 0) {
+            ctx.save();
+            ctx.globalCompositeOperation = "screen";
+            ctx.globalAlpha = controls.reflection * 0.45;
+
+            ctx.beginPath();
+            ctx.moveTo(pAbs[0].x, pAbs[0].y);
+            ctx.lineTo(pAbs[1].x, pAbs[1].y);
+            ctx.lineTo(pAbs[2].x, pAbs[2].y);
+            ctx.lineTo(pAbs[3].x, pAbs[3].y);
+            ctx.closePath();
+            ctx.clip();
+
+            ctx.drawImage(roomImg, 0, 0, width, height);
+            ctx.restore();
+          }
+
+          // 5. Render Brightness overlay on tiles
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(pAbs[0].x, pAbs[0].y);
+          ctx.lineTo(pAbs[1].x, pAbs[1].y);
+          ctx.lineTo(pAbs[2].x, pAbs[2].y);
+          ctx.lineTo(pAbs[3].x, pAbs[3].y);
+          ctx.closePath();
+          ctx.clip();
+
+          if (controls.brightness !== 1.0) {
+            ctx.fillStyle = controls.brightness > 1.0 ? "white" : "black";
+            ctx.globalAlpha = Math.abs(controls.brightness - 1.0) * 0.4;
+            ctx.fill();
+          }
+          ctx.restore();
+        }
+      }
+
+      // 6. Layer the transparent furniture, window frames, plant pot, and baseboard overlays
+      const roomOverlayImg = roomOverlayRef.current;
+      if (roomOverlayImg) {
+        ctx.drawImage(roomOverlayImg, 0, 0, width, height);
+      }
+
+      // Trigger automatic high-definition file download
+      const dataUrl = exportCanvas.toDataURL("image/png");
       const link = document.createElement("a");
-      link.download = "tilevista-visualization.png";
+      link.download = `tilevista-render-8k.png`;
       link.href = dataUrl;
       link.click();
     } catch (err) {
-      console.error("Failed to download canvas", err);
+      console.error("Failed to generate and download 8k canvas render", err);
     }
   };
 
@@ -481,12 +663,12 @@ export default function VisualizationCanvas({
 
           <button
             onClick={handleDownload}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#207868] hover:bg-[#196053] rounded-lg text-xs font-extrabold text-white transition-all active:scale-95 cursor-pointer shadow-sm ml-2"
-            title="Download Visual Image"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#207868] hover:bg-[#196053] rounded-lg text-xs font-extrabold text-white transition-all active:scale-95 cursor-pointer shadow-sm ml-2"
+            title="Download 8K HD Image"
             id="download-canvas-btn"
           >
             <Download className="w-3.5 h-3.5" />
-            <span>Download PNG</span>
+            <span>Download 8K PNG</span>
           </button>
         </div>
       </div>

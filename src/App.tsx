@@ -1,7 +1,7 @@
 import { useState, useEffect, ChangeEvent } from "react";
 import { EditorControlsState, DimensionState, TileData, Point2D } from "./types";
 import { getSampleTiles } from "./data/sampleTiles";
-import { generateProceduralRoomImage } from "./data/sampleRoom";
+import { generateProceduralRoomImage, generateProceduralRoomOverlay } from "./data/sampleRoom";
 import { createTilePatternSheet } from "./services/tileRenderingService";
 import Header from "./components/Header";
 import VisualizationCanvas from "./components/VisualizationCanvas";
@@ -45,6 +45,7 @@ const DEFAULT_CONTROLS: EditorControlsState = {
 export default function App() {
   // Main states
   const [roomImage, setRoomImage] = useState<string | null>(null);
+  const [roomOverlay, setRoomOverlay] = useState<string | null>(null);
   const [tiles, setTiles] = useState<TileData[]>([]);
   const [selectedTileId, setSelectedTileId] = useState<string>("majolica-blue");
   const [points, setPoints] = useState<Point2D[]>(FLOOR_POINTS);
@@ -70,7 +71,9 @@ export default function App() {
     setTiles(initializedTiles);
 
     const demoRoom = generateProceduralRoomImage();
+    const demoOverlay = generateProceduralRoomOverlay();
     setRoomImage(demoRoom);
+    setRoomOverlay(demoOverlay);
     setSelectedTileId("majolica-blue");
     setPoints(FLOOR_POINTS);
   }, []);
@@ -141,6 +144,7 @@ export default function App() {
       reader.onload = (event) => {
         if (event.target?.result) {
           setRoomImage(event.target.result as string);
+          setRoomOverlay(null); // Clear transparent overlay for user custom rooms
           setPoints(FLOOR_POINTS);
           triggerNotification("Room image uploaded successfully!");
         }
@@ -189,7 +193,9 @@ export default function App() {
   // App-level resets matching 'New Project'
   const handleResetWorkspace = () => {
     const demoRoom = generateProceduralRoomImage();
+    const demoOverlay = generateProceduralRoomOverlay();
     setRoomImage(demoRoom);
+    setRoomOverlay(demoOverlay);
     setSelectedTileId("majolica-blue");
     setRoomWidthFt(15);
     setRoomLengthFt(12);
@@ -425,6 +431,7 @@ export default function App() {
               {roomImage ? (
                 <VisualizationCanvas
                   roomImageSrc={roomImage}
+                  roomOverlaySrc={roomOverlay}
                   tilePatternSheet={tilePatternSheet}
                   points={points}
                   onPointsChange={setPoints}
@@ -585,26 +592,43 @@ export default function App() {
         </div>
       )}
 
-      {/* 3. Personalized English academic footer dedicated to Ceramics & Sculpture Department with Portfolio link */}
-      <footer className="bg-white border-t border-neutral-150 px-6 py-6 text-center text-neutral-400 text-xs mt-auto" id="tilevista-footer">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-          <p className="text-neutral-500 font-medium">© 2026 TileVista. Visualise with Absolute Precision. Decide with Certainty.</p>
-          <div className="flex items-center gap-2 text-[11.5px] font-bold text-neutral-600" id="academic-credit">
-            <span>Portfolio Project • Saima Biva</span>
-            <span className="text-neutral-300">|</span>
-            <span className="text-neutral-500 font-extrabold">Department of Ceramics & Sculpture</span>
-            <span className="text-neutral-300">|</span>
-            <span className="text-neutral-600">University of Rajshahi</span>
-            <span className="text-neutral-300">|</span>
-            <a
-              href="https://saimabiva.pro.bd/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[#207868] hover:text-[#165549] underline flex items-center gap-0.5"
-            >
-              saimabiva.pro.bd
-            </a>
+      {/* 3. Premium Elegant Device-Friendly Footer */}
+      <footer className="bg-neutral-950 border-t border-neutral-800/80 px-6 py-12 text-neutral-400 text-xs mt-auto relative overflow-hidden" id="tilevista-footer">
+        {/* Subtle decorative premium gradient bar at the top */}
+        <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-emerald-500 via-teal-600 to-amber-500 opacity-80" />
+
+        <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center md:items-start gap-8 text-center md:text-left animate-fade-in" id="footer-container">
+          {/* Brand & Tagline - Left Column */}
+          <div className="space-y-2 max-w-md" id="footer-brand">
+            <h3 className="text-white font-black text-lg tracking-wider font-sans flex items-center justify-center md:justify-start gap-2">
+              <span className="bg-gradient-to-r from-[#72AD9C] to-[#FFAA47] text-transparent bg-clip-text">TileVista</span>
+            </h3>
+            <p className="text-neutral-400 text-[13px] font-medium leading-relaxed">
+              Visualise with Absolute Precision. Decide with Certainty.
+            </p>
           </div>
+
+          {/* Academic Portfolio Credit & Link - Right Column */}
+          <div className="space-y-2 flex flex-col items-center md:items-end" id="footer-academic">
+            <p className="text-neutral-300 text-[13px] font-bold tracking-wide">
+              A project by{" "}
+              <a
+                href="https://saimabiva.pro.bd/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[#3ab39c] hover:text-[#52cbb4] underline underline-offset-4 decoration-2 decoration-[#207868]/40 hover:decoration-[#3ab39c] transition-all font-black"
+                id="saima-portfolio-link"
+              >
+                Saima Biva
+              </a>{" "}
+              | RU
+            </p>
+          </div>
+        </div>
+
+        {/* Minimal Copyright border top */}
+        <div className="max-w-6xl mx-auto mt-8 pt-6 border-t border-neutral-900 text-center text-[11px] text-neutral-500">
+          © 2026 TileVista.
         </div>
       </footer>
     </div>
