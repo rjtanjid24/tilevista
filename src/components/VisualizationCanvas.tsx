@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState } from "react";
 import { Point2D, EditorControlsState } from "../types";
 import { drawTriangleTexture, interpolateQuad, isConvexQuad } from "../utils/geometryUtils";
-import { Maximize, HelpCircle, Eye, Download } from "lucide-react";
+import { Maximize, HelpCircle, Eye, Download, Loader2 } from "lucide-react";
 
 /**
  * Creates a thresholded binary mask from the overlay image.
@@ -83,6 +83,8 @@ export default function VisualizationCanvas({
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
   const [isHoveringHandle, setIsHoveringHandle] = useState<number | null>(null);
   const [isDraggingSlider, setIsDraggingSlider] = useState<boolean>(false);
+  const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [downloadedImage, setDownloadedImage] = useState<string | null>(null);
 
   // Load the room image
   useEffect(() => {
@@ -531,179 +533,195 @@ export default function VisualizationCanvas({
     const roomImg = roomImageRef.current;
     if (!roomImg) return;
 
-    try {
-      // exact 8K UHD widescreen resolution (7680 x 4320)
-      const width = 7680;
-      const height = 4320;
+    setIsGenerating(true);
 
-      // Create high-res offscreen canvas
-      const exportCanvas = document.createElement("canvas");
-      exportCanvas.width = width;
-      exportCanvas.height = height;
-      const ctx = exportCanvas.getContext("2d");
-      if (!ctx) return;
+    // Run heavy processing in a brief timeout to let the UI update and render the processing spinner
+    setTimeout(() => {
+      try {
+        // exact 8K UHD widescreen resolution (7680 x 4320)
+        const width = 7680;
+        const height = 4320;
 
-      // Set high-quality image smoothing
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
-
-      // 1. Draw high-res base room background (walls and empty floor)
-      ctx.drawImage(roomImg, 0, 0, width, height);
-
-      // 2. Render high-res tile layer
-      // Crucial: No editing lines, helper markers, or corner gridlines are drawn in the final download output.
-      if (tilePatternSheet && points.length === 4) {
-        // Calculate high-res absolute point vertices
-        const pAbs = points.map((p) => ({
-          x: p.x * width,
-          y: p.y * height,
-        }));
-
-        // 32x32 Grid subdivision for ultra-fine perspective warping and razor-sharp tile edges in 8K
-        const gridCount = 32;
-
-        const tileLayerCanvas = document.createElement("canvas");
-        tileLayerCanvas.width = width;
-        tileLayerCanvas.height = height;
-        const tCtx = tileLayerCanvas.getContext("2d");
-
-        if (tCtx) {
-          for (let j = 0; j < gridCount; j++) {
-            for (let i = 0; i < gridCount; i++) {
-              const s0 = i / gridCount;
-              const s1 = (i + 1) / gridCount;
-              const t0 = j / gridCount;
-              const t1 = (j + 1) / gridCount;
-
-              // Interpolate high-res target vertices
-              const tTL = interpolateQuad(pAbs[0], pAbs[1], pAbs[2], pAbs[3], s0, t0);
-              const tTR = interpolateQuad(pAbs[0], pAbs[1], pAbs[2], pAbs[3], s1, t0);
-              const tBR = interpolateQuad(pAbs[0], pAbs[1], pAbs[2], pAbs[3], s1, t1);
-              const tBL = interpolateQuad(pAbs[0], pAbs[1], pAbs[2], pAbs[3], s0, t1);
-
-              // Pattern source mapping coordinates matching selected design configurations
-              const sc = controls.scale;
-              const ox = controls.offsetX * 2;
-              const oy = controls.offsetY * 2;
-
-              const u0 = s0 * 1024 * sc + ox;
-              const u1 = s1 * 1024 * sc + ox;
-              const v0 = t0 * 1024 * sc + oy;
-              const v1 = t1 * 1024 * sc + oy;
-
-              // Triangle A
-              drawTriangleTexture(
-                tCtx,
-                tilePatternSheet,
-                u0, v0,
-                u1, v0,
-                u0, v1,
-                tTL.x, tTL.y,
-                tTR.x, tTR.y,
-                tBL.x, tBL.y
-              );
-
-              // Triangle B
-              drawTriangleTexture(
-                tCtx,
-                tilePatternSheet,
-                u1, v0,
-                u1, v1,
-                u0, v1,
-                tTR.x, tTR.y,
-                tBR.x, tBR.y,
-                tBL.x, tBL.y
-              );
-            }
-          }
-
-          // Apply alpha-masking using the thresholded room overlay mask
-          // This ensures the tile pattern is rendered exclusively behind furniture, windows, and frames
-          const roomOverlayImg = roomOverlayRef.current;
-          if (roomOverlayImg && tCtx) {
-            const mask = createThresholdedMask(roomOverlayImg, width, height);
-            tCtx.save();
-            tCtx.globalCompositeOperation = "destination-out";
-            tCtx.drawImage(mask, 0, 0, width, height);
-            tCtx.restore();
-          }
-
-          // Render tiles to master context with opacity adjustments
-          ctx.save();
-          ctx.globalAlpha = controls.opacity;
-          ctx.drawImage(tileLayerCanvas, 0, 0);
-          ctx.restore();
-
-          // 3. Render High-Res Shadows
-          if (controls.shadow > 0) {
-            ctx.save();
-            ctx.globalCompositeOperation = "multiply";
-            ctx.globalAlpha = controls.shadow * 0.85;
-
-            ctx.beginPath();
-            ctx.moveTo(pAbs[0].x, pAbs[0].y);
-            ctx.lineTo(pAbs[1].x, pAbs[1].y);
-            ctx.lineTo(pAbs[2].x, pAbs[2].y);
-            ctx.lineTo(pAbs[3].x, pAbs[3].y);
-            ctx.closePath();
-            ctx.clip();
-
-            ctx.drawImage(roomImg, 0, 0, width, height);
-            ctx.restore();
-          }
-
-          // 4. Render High-Res Reflections
-          if (controls.reflection > 0) {
-            ctx.save();
-            ctx.globalCompositeOperation = "screen";
-            ctx.globalAlpha = controls.reflection * 0.45;
-
-            ctx.beginPath();
-            ctx.moveTo(pAbs[0].x, pAbs[0].y);
-            ctx.lineTo(pAbs[1].x, pAbs[1].y);
-            ctx.lineTo(pAbs[2].x, pAbs[2].y);
-            ctx.lineTo(pAbs[3].x, pAbs[3].y);
-            ctx.closePath();
-            ctx.clip();
-
-            ctx.drawImage(roomImg, 0, 0, width, height);
-            ctx.restore();
-          }
-
-          // 5. Render Brightness overlay on tiles
-          ctx.save();
-          ctx.beginPath();
-          ctx.moveTo(pAbs[0].x, pAbs[0].y);
-          ctx.lineTo(pAbs[1].x, pAbs[1].y);
-          ctx.lineTo(pAbs[2].x, pAbs[2].y);
-          ctx.lineTo(pAbs[3].x, pAbs[3].y);
-          ctx.closePath();
-          ctx.clip();
-
-          if (controls.brightness !== 1.0) {
-            ctx.fillStyle = controls.brightness > 1.0 ? "white" : "black";
-            ctx.globalAlpha = Math.abs(controls.brightness - 1.0) * 0.4;
-            ctx.fill();
-          }
-          ctx.restore();
+        // Create high-res offscreen canvas
+        const exportCanvas = document.createElement("canvas");
+        exportCanvas.width = width;
+        exportCanvas.height = height;
+        const ctx = exportCanvas.getContext("2d");
+        if (!ctx) {
+          setIsGenerating(false);
+          return;
         }
-      }
 
-      // 6. Layer the transparent furniture, window frames, plant pot, and baseboard overlays
-      const roomOverlayImg = roomOverlayRef.current;
-      if (roomOverlayImg) {
-        ctx.drawImage(roomOverlayImg, 0, 0, width, height);
-      }
+        // Set high-quality image smoothing
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
 
-      // Trigger automatic high-definition file download
-      const dataUrl = exportCanvas.toDataURL("image/png");
-      const link = document.createElement("a");
-      link.download = `tilevista-render-8k.png`;
-      link.href = dataUrl;
-      link.click();
-    } catch (err) {
-      console.error("Failed to generate and download 8k canvas render", err);
-    }
+        // 1. Draw high-res base room background (walls and empty floor)
+        ctx.drawImage(roomImg, 0, 0, width, height);
+
+        // 2. Render high-res tile layer
+        // Crucial: No editing lines, helper markers, or corner gridlines are drawn in the final download output.
+        if (tilePatternSheet && points.length === 4) {
+          // Calculate high-res absolute point vertices
+          const pAbs = points.map((p) => ({
+            x: p.x * width,
+            y: p.y * height,
+          }));
+
+          // 32x32 Grid subdivision for ultra-fine perspective warping and razor-sharp tile edges in 8K
+          const gridCount = 32;
+
+          const tileLayerCanvas = document.createElement("canvas");
+          tileLayerCanvas.width = width;
+          tileLayerCanvas.height = height;
+          const tCtx = tileLayerCanvas.getContext("2d");
+
+          if (tCtx) {
+            for (let j = 0; j < gridCount; j++) {
+              for (let i = 0; i < gridCount; i++) {
+                const s0 = i / gridCount;
+                const s1 = (i + 1) / gridCount;
+                const t0 = j / gridCount;
+                const t1 = (j + 1) / gridCount;
+
+                // Interpolate high-res target vertices
+                const tTL = interpolateQuad(pAbs[0], pAbs[1], pAbs[2], pAbs[3], s0, t0);
+                const tTR = interpolateQuad(pAbs[0], pAbs[1], pAbs[2], pAbs[3], s1, t0);
+                const tBR = interpolateQuad(pAbs[0], pAbs[1], pAbs[2], pAbs[3], s1, t1);
+                const tBL = interpolateQuad(pAbs[0], pAbs[1], pAbs[2], pAbs[3], s0, t1);
+
+                // Pattern source mapping coordinates matching selected design configurations
+                const sc = controls.scale;
+                const ox = controls.offsetX * 2;
+                const oy = controls.offsetY * 2;
+
+                const u0 = s0 * 1024 * sc + ox;
+                const u1 = s1 * 1024 * sc + ox;
+                const v0 = t0 * 1024 * sc + oy;
+                const v1 = t1 * 1024 * sc + oy;
+
+                // Triangle A
+                drawTriangleTexture(
+                  tCtx,
+                  tilePatternSheet,
+                  u0, v0,
+                  u1, v0,
+                  u0, v1,
+                  tTL.x, tTL.y,
+                  tTR.x, tTR.y,
+                  tBL.x, tBL.y
+                );
+
+                // Triangle B
+                drawTriangleTexture(
+                  tCtx,
+                  tilePatternSheet,
+                  u1, v0,
+                  u1, v1,
+                  u0, v1,
+                  tTR.x, tTR.y,
+                  tBR.x, tBR.y,
+                  tBL.x, tBL.y
+                );
+              }
+            }
+
+            // Apply alpha-masking using the thresholded room overlay mask
+            // This ensures the tile pattern is rendered exclusively behind furniture, windows, and frames
+            const roomOverlayImg = roomOverlayRef.current;
+            if (roomOverlayImg && tCtx) {
+              const mask = createThresholdedMask(roomOverlayImg, width, height);
+              tCtx.save();
+              tCtx.globalCompositeOperation = "destination-out";
+              tCtx.drawImage(mask, 0, 0, width, height);
+              tCtx.restore();
+            }
+
+            // Render tiles to master context with opacity adjustments
+            ctx.save();
+            ctx.globalAlpha = controls.opacity;
+            ctx.drawImage(tileLayerCanvas, 0, 0);
+            ctx.restore();
+
+            // 3. Render High-Res Shadows
+            if (controls.shadow > 0) {
+              ctx.save();
+              ctx.globalCompositeOperation = "multiply";
+              ctx.globalAlpha = controls.shadow * 0.85;
+
+              ctx.beginPath();
+              ctx.moveTo(pAbs[0].x, pAbs[0].y);
+              ctx.lineTo(pAbs[1].x, pAbs[1].y);
+              ctx.lineTo(pAbs[2].x, pAbs[2].y);
+              ctx.lineTo(pAbs[3].x, pAbs[3].y);
+              ctx.closePath();
+              ctx.clip();
+
+              ctx.drawImage(roomImg, 0, 0, width, height);
+              ctx.restore();
+            }
+
+            // 4. Render High-Res Reflections
+            if (controls.reflection > 0) {
+              ctx.save();
+              ctx.globalCompositeOperation = "screen";
+              ctx.globalAlpha = controls.reflection * 0.45;
+
+              ctx.beginPath();
+              ctx.moveTo(pAbs[0].x, pAbs[0].y);
+              ctx.lineTo(pAbs[1].x, pAbs[1].y);
+              ctx.lineTo(pAbs[2].x, pAbs[2].y);
+              ctx.lineTo(pAbs[3].x, pAbs[3].y);
+              ctx.closePath();
+              ctx.clip();
+
+              ctx.drawImage(roomImg, 0, 0, width, height);
+              ctx.restore();
+            }
+
+            // 5. Render Brightness overlay on tiles
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(pAbs[0].x, pAbs[0].y);
+            ctx.lineTo(pAbs[1].x, pAbs[1].y);
+            ctx.lineTo(pAbs[2].x, pAbs[2].y);
+            ctx.lineTo(pAbs[3].x, pAbs[3].y);
+            ctx.closePath();
+            ctx.clip();
+
+            if (controls.brightness !== 1.0) {
+              ctx.fillStyle = controls.brightness > 1.0 ? "white" : "black";
+              ctx.globalAlpha = Math.abs(controls.brightness - 1.0) * 0.4;
+              ctx.fill();
+            }
+            ctx.restore();
+          }
+        }
+
+        // 6. Layer the transparent furniture, window frames, plant pot, and baseboard overlays
+        const roomOverlayImg = roomOverlayRef.current;
+        if (roomOverlayImg) {
+          ctx.drawImage(roomOverlayImg, 0, 0, width, height);
+        }
+
+        // Trigger automatic high-definition file download
+        const dataUrl = exportCanvas.toDataURL("image/png");
+        setDownloadedImage(dataUrl);
+
+        try {
+          const link = document.createElement("a");
+          link.download = `tilevista-render-8k.png`;
+          link.href = dataUrl;
+          link.click();
+        } catch (downloadErr) {
+          console.warn("Silent fallback: automatic direct click download was restricted by sandbox", downloadErr);
+        }
+      } catch (err) {
+        console.error("Failed to generate and download 8k canvas render", err);
+      } finally {
+        setIsGenerating(false);
+      }
+    }, 50);
   };
 
   return (
@@ -774,7 +792,76 @@ export default function VisualizationCanvas({
         <div className="absolute bottom-3 right-3 bg-neutral-950/75 backdrop-blur-sm px-2.5 py-1 rounded border border-neutral-800 text-[8px] font-semibold text-neutral-400 max-w-[190px] pointer-events-none" id="canvas-disclaimer">
           Estimate only. Actual appearance may vary by lighting, batch & grout.
         </div>
+
+        {/* Dynamic 8K render generating spinner overlay */}
+        {isGenerating && (
+          <div className="absolute inset-0 bg-neutral-955/90 backdrop-blur-xs flex flex-col items-center justify-center space-y-3 z-40 text-center px-4 animate-fade-in" id="generating-8k-overlay">
+            <Loader2 className="w-8 h-8 text-emerald-400 animate-spin" />
+            <div className="space-y-1">
+              <p className="text-white text-xs font-black uppercase tracking-wider">Generating UHD 8K Image</p>
+              <p className="text-neutral-400 text-[10px]">Processing ultra-fine perspective warping and shadows...</p>
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* 8K Render Complete - Touch & Save Instruction Modal for Mobile & Fallbacks */}
+      {downloadedImage && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/85 backdrop-blur-xs" id="download-success-modal">
+          <div className="bg-[#FAF9F6] rounded-3xl p-6 md:p-8 max-w-lg w-full border border-neutral-250 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-200">
+            <div className="flex justify-between items-start">
+              <div>
+                <span className="text-[9px] bg-emerald-500/10 text-[#196053] px-2.5 py-1 rounded-full font-black uppercase tracking-wide">
+                  8K UHD Render Ready
+                </span>
+                <h3 className="text-base sm:text-lg font-black text-neutral-900 mt-2">Your Space is Visualised!</h3>
+              </div>
+              <button
+                onClick={() => setDownloadedImage(null)}
+                className="text-neutral-400 hover:text-neutral-700 font-extrabold text-base p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="relative border border-neutral-200 rounded-2xl overflow-hidden shadow-inner max-h-[280px] sm:max-h-[320px] flex items-center justify-center bg-neutral-950">
+              <img
+                src={downloadedImage}
+                alt="8K HD Render Preview"
+                className="max-w-full max-h-[280px] sm:max-h-[320px] object-contain select-none"
+              />
+            </div>
+
+            <div className="bg-[#1D4A3F]/5 rounded-2xl p-4 border border-[#1D4A3F]/10 text-[11px] sm:text-xs text-neutral-700 space-y-1.5">
+              <p className="font-extrabold text-[#1D4A3F] flex items-center gap-1.5">
+                <span>📱 Device Save Instructions</span>
+              </p>
+              <p className="leading-relaxed font-medium text-neutral-600">
+                If the file download did not start automatically:
+                <strong className="block mt-1 text-neutral-900 font-bold">
+                  Touch and hold (long press) the image preview above, then choose "Save to Photos" or "Download Image".
+                </strong>
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2.5 pt-1">
+              <button
+                onClick={() => setDownloadedImage(null)}
+                className="w-full sm:w-1/3 bg-neutral-200/80 hover:bg-neutral-250 text-neutral-700 py-3 rounded-xl text-xs font-extrabold transition-all active:scale-95 cursor-pointer"
+              >
+                Done
+              </button>
+              <a
+                href={downloadedImage}
+                download="tilevista-render-8k.png"
+                className="w-full sm:w-2/3 bg-[#207868] hover:bg-[#196053] text-white py-3 rounded-xl text-xs font-extrabold text-center block transition-all active:scale-95 shadow-md"
+              >
+                Download Direct File
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

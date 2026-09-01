@@ -60,7 +60,6 @@ export default function App() {
 
   // UI state overlays
   const [showNotification, setShowNotification] = useState<string | null>(null);
-  const [showOrderModal, setShowOrderModal] = useState<boolean>(false);
 
   // Offscreen rendering caching
   const [tilePatternSheet, setTilePatternSheet] = useState<HTMLCanvasElement | null>(null);
@@ -468,15 +467,6 @@ export default function App() {
                   </p>
                 </div>
               </div>
-
-              {/* Order action button */}
-              <button
-                onClick={() => setShowOrderModal(true)}
-                className="w-full sm:w-auto px-8 py-3 bg-[#1D4A3F] hover:bg-[#165549] rounded-xl text-sm font-extrabold text-white transition-all shadow-md active:scale-95 cursor-pointer"
-                id="order-now-btn"
-              >
-                Generate Order Quotation
-              </button>
             </div>
           </div>
 
@@ -525,81 +515,14 @@ export default function App() {
         </section>
       </main>
 
-      {/* ================= ORDER QUOTATION MODAL ================= */}
-      {showOrderModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs" id="order-modal-overlay">
-          <div className="bg-[#FAF9F6] rounded-3xl p-6 md:p-8 max-w-md w-full border border-neutral-200 shadow-2xl space-y-6 animate-in fade-in zoom-in duration-200">
-            <div className="flex items-start justify-between">
-              <div>
-                <span className="text-[9px] bg-[#207868]/10 text-[#207868] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">Tile Quotation</span>
-                <h3 className="text-lg font-black text-neutral-900 mt-2">Order Confirmation</h3>
-              </div>
-              <button
-                onClick={() => setShowOrderModal(false)}
-                className="text-neutral-400 hover:text-neutral-700 font-extrabold text-xl p-1 shrink-0"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="bg-white rounded-2xl p-4.5 border border-neutral-200/60 space-y-3.5 text-xs">
-              <div className="flex justify-between border-b border-neutral-100 pb-2">
-                <span className="text-neutral-500 font-medium">Selected Tile Pattern:</span>
-                <span className="font-extrabold text-neutral-800 truncate max-w-[200px]">
-                  {selectedTile?.name || "Majolica Portuguese"}
-                </span>
-              </div>
-              <div className="flex justify-between border-b border-neutral-100 pb-2">
-                <span className="text-neutral-500 font-medium">Room Total Space:</span>
-                <span className="font-extrabold text-neutral-800">
-                  {totalAreaSqFt} sq ft ({roomLengthFt} x {roomWidthFt} ft)
-                </span>
-              </div>
-              <div className="flex justify-between border-b border-neutral-100 pb-2">
-                <span className="text-neutral-500 font-medium">Tile Size:</span>
-                <span className="font-extrabold text-neutral-800">
-                  {selectedTileSize === "2x2" ? "2x2 ft (60x60 cm)" : "1x2 ft (30x60 cm)"}
-                </span>
-              </div>
-              <div className="flex justify-between text-sm pt-1">
-                <span className="text-neutral-900 font-extrabold">Total Required Tiles:</span>
-                <span className="font-black text-[#207868] text-base">{requiredTilesCount} pcs</span>
-              </div>
-            </div>
-
-            <p className="text-[10.5px] text-neutral-400 leading-normal">
-              * Note: This is an estimated layout calculation. Actual field cutting wastage buffers might vary based on your room corners. Powered by traditional craftsmanship from the Rajshahi Ceramics & Sculpture community.
-            </p>
-
-            <div className="grid grid-cols-2 gap-3 pt-2">
-              <button
-                onClick={() => setShowOrderModal(false)}
-                className="w-full bg-neutral-100 hover:bg-neutral-200 text-neutral-700 py-3 rounded-xl text-xs font-extrabold transition-all active:scale-95 cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  setShowOrderModal(false);
-                  triggerNotification("Your quotation request was submitted successfully!");
-                }}
-                className="w-full bg-[#207868] hover:bg-[#196053] text-white py-3 rounded-xl text-xs font-extrabold transition-all active:scale-95 cursor-pointer"
-              >
-                Submit Order
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* 3. Premium Elegant Device-Friendly Footer */}
       <footer className="bg-neutral-950 border-t border-neutral-800/80 px-6 py-10 text-neutral-400 text-xs mt-auto relative overflow-hidden" id="tilevista-footer">
         {/* Subtle decorative premium gradient bar at the top */}
         <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-emerald-500 via-teal-600 to-amber-500 opacity-80" />
 
-        <div className="max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6 text-center md:text-left animate-fade-in" id="footer-container">
-          {/* Brand - Left Column: uses exact same logo icon grid and typography from header */}
-          <div className="flex items-center gap-2.5" id="footer-brand">
+        <div className="max-w-xl mx-auto flex flex-col items-center justify-center gap-6 text-center animate-fade-in" id="footer-container">
+          {/* Brand: uses exact same logo icon grid and typography from header */}
+          <div className="flex items-center gap-2.5 justify-center" id="footer-brand">
             <div className="grid grid-cols-2 gap-0.5 w-6 h-6 shrink-0" id="footer-logo-icon-grid">
               <div className="bg-[#F19A3E] rounded-[1px]" /> {/* Orange */}
               <div className="bg-[#72AD9C] rounded-[1px]" /> {/* Teal */}
@@ -611,20 +534,22 @@ export default function App() {
             </h3>
           </div>
 
-          {/* Academic Portfolio Credit & Link - Right Column */}
-          <div className="flex flex-col items-center md:items-end" id="footer-academic">
+          {/* Academic Portfolio Credit & Link */}
+          <div className="flex flex-col items-center text-center space-y-1.5" id="footer-academic">
             <p className="text-neutral-300 text-[13px] sm:text-sm font-bold tracking-wide">
               A project by{" "}
               <a
                 href="https://saimabiva.pro.bd/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[#3ab39c] hover:text-[#52cbb4] underline underline-offset-4 decoration-2 decoration-[#207868]/40 hover:decoration-[#3ab39c] transition-all font-black"
+                className="text-[#FFAA47] hover:text-[#ffbe73] underline decoration-wavy decoration-[#FFAA47]/40 underline-offset-4 transition-all font-black"
                 id="saima-portfolio-link"
               >
                 Saima Biva
-              </a>{" "}
-              | RU
+              </a>
+            </p>
+            <p className="text-neutral-500 text-[10px] sm:text-xs font-semibold tracking-wider uppercase">
+              Department of Ceramics & Sculpture · University of Rajshahi
             </p>
           </div>
         </div>
