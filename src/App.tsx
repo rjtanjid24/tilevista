@@ -57,6 +57,7 @@ export default function App() {
   const [selectedTileSize, setSelectedTileSize] = useState<"2x2" | "1x2">("2x2");
   const [groutColorIndex, setGroutColorIndex] = useState<number>(30); // mapped to slider
   const [isWall, setIsWall] = useState<boolean>(false);
+  const [activeMobileStepTab, setActiveMobileStepTab] = useState<number>(1);
 
   // UI state overlays
   const [showNotification, setShowNotification] = useState<string | null>(null);
@@ -236,7 +237,7 @@ export default function App() {
       <main className="flex-1 w-full max-w-[1440px] mx-auto p-4 sm:p-5 md:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-6 items-start" id="tilevista-editor-stage">
         
         {/* ================= COLUMN 1: DESIGN PANEL (Sidebar Controls - spans 4 cols on lg screens) ================= */}
-        <section className="lg:col-span-4 space-y-5 flex flex-col" id="col-design-panel">
+        <section className="lg:col-span-4 space-y-4 flex flex-col" id="col-design-panel">
           
           <div className="flex items-center justify-between px-1" id="panel-title-bar">
             <h2 className="text-xl font-extrabold text-neutral-900 tracking-tight flex items-center gap-2">
@@ -244,8 +245,36 @@ export default function App() {
             </h2>
           </div>
 
+          {/* Quick Step Switcher Tab bar for Mobiles (hidden on Desktop) */}
+          <div className="lg:hidden flex bg-[#FAF9F6] p-1 rounded-2xl border border-neutral-200/60 gap-1.5" id="mobile-step-tabs">
+            <button
+              onClick={() => setActiveMobileStepTab(1)}
+              className={`flex-1 py-2 rounded-xl text-xs font-black transition-all active:scale-95 cursor-pointer ${
+                activeMobileStepTab === 1 ? "bg-[#1D4A3F] text-white shadow-md" : "text-neutral-600 hover:bg-neutral-100"
+              }`}
+            >
+              📐 Size
+            </button>
+            <button
+              onClick={() => setActiveMobileStepTab(2)}
+              className={`flex-1 py-2 rounded-xl text-xs font-black transition-all active:scale-95 cursor-pointer ${
+                activeMobileStepTab === 2 ? "bg-[#1D4A3F] text-white shadow-md" : "text-neutral-600 hover:bg-neutral-100"
+              }`}
+            >
+              🎨 Tile
+            </button>
+            <button
+              onClick={() => setActiveMobileStepTab(3)}
+              className={`flex-1 py-2 rounded-xl text-xs font-black transition-all active:scale-95 cursor-pointer ${
+                activeMobileStepTab === 3 ? "bg-[#1D4A3F] text-white shadow-md" : "text-neutral-600 hover:bg-neutral-100"
+              }`}
+            >
+              ⚙️ Tune
+            </button>
+          </div>
+
           {/* Step 1: Define Space */}
-          <div className="bg-[#FAF9F6] rounded-2xl p-5 shadow-sm border border-neutral-200/40 space-y-4" id="step-1-card">
+          <div className={`${activeMobileStepTab === 1 ? "block" : "hidden lg:block"} bg-[#FAF9F6] rounded-2xl p-5 shadow-sm border border-neutral-200/40 space-y-4`} id="step-1-card">
             <div className="bg-[#FFAA47]/15 text-[#D06F00] px-3.5 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5" id="step-1-eyebrow">
               <span className="w-2 h-2 rounded-full bg-[#FFAA47]" />
               Step 1: Room Dimensions
@@ -288,7 +317,7 @@ export default function App() {
           </div>
 
           {/* Step 2: Tile Selection & Upload */}
-          <div className="bg-[#FAF9F6] rounded-2xl p-5 shadow-sm border border-neutral-200/40 space-y-4" id="step-2-card">
+          <div className={`${activeMobileStepTab === 2 ? "block" : "hidden lg:block"} bg-[#FAF9F6] rounded-2xl p-5 shadow-sm border border-neutral-200/40 space-y-4`} id="step-2-card">
             <div className="bg-[#FFAA47]/15 text-[#D06F00] px-3.5 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-[#FFAA47]" />
               Step 2: Upload Custom Design
@@ -337,7 +366,7 @@ export default function App() {
           </div>
 
           {/* Step 3: Alignments & Grout settings */}
-          <div className="bg-[#FAF9F6] rounded-2xl p-5 shadow-sm border border-neutral-200/40 space-y-4" id="step-3-card">
+          <div className={`${activeMobileStepTab === 3 ? "block" : "hidden lg:block"} bg-[#FAF9F6] rounded-2xl p-5 shadow-sm border border-neutral-200/40 space-y-4`} id="step-3-card">
             <div className="bg-[#FFAA47]/15 text-[#D06F00] px-3.5 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-[#FFAA47]" />
               Step 3: Setup & Adjustments
@@ -449,63 +478,117 @@ export default function App() {
               )}
             </div>
 
-            {/* Bottom calculation bar containing dimensions and order actions */}
-            <div className="mt-4 pt-4 border-t border-neutral-200/60 flex flex-col sm:flex-row items-center justify-between gap-4 px-2" id="results-footer-bar">
-              <div className="flex items-center gap-10" id="metrics-summary">
-                {/* Room Size Display */}
-                <div className="bg-white px-4 py-2.5 rounded-xl border border-neutral-200/60 shadow-xs">
-                  <span className="block text-[10px] font-extrabold text-neutral-400 uppercase tracking-wider">Room Area</span>
-                  <p className="text-lg font-black text-neutral-800 mt-0.5" id="size-metric-display">
-                    {totalAreaSqFt} sq ft ({roomLengthFt} x {roomWidthFt} ft)
-                  </p>
+            {/* Elegant 4-Column Project Estimation & Layout Specs Dashboard (fills empty PC space perfectly) */}
+            <div className="mt-5 pt-4 border-t border-neutral-200/80 text-left" id="results-footer-bar">
+              <span className="block text-[10px] font-black uppercase text-neutral-400 tracking-wider mb-2.5 px-1">
+                📊 Estimated Material Requirements & Technical Specifications
+              </span>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5" id="metrics-summary">
+                {/* 1. Room Size Display */}
+                <div className="bg-white p-3.5 rounded-xl border border-neutral-200 shadow-xs flex flex-col justify-between">
+                  <div>
+                    <span className="block text-[9px] font-extrabold text-neutral-400 uppercase tracking-wider">Total Area</span>
+                    <p className="text-sm sm:text-base font-black text-neutral-900 mt-0.5 truncate" id="size-metric-display">
+                      {totalAreaSqFt} sq ft
+                    </p>
+                  </div>
+                  <span className="text-[10px] text-neutral-500 font-bold mt-1.5 block">
+                    {roomLengthFt}′ × {roomWidthFt}′ Room
+                  </span>
                 </div>
-                {/* Required Tiles Count Display */}
-                <div className="bg-white px-4 py-2.5 rounded-xl border border-neutral-200/60 shadow-xs">
-                  <span className="block text-[10px] font-extrabold text-neutral-400 uppercase tracking-wider">Estimated Tiles</span>
-                  <p className="text-lg font-black text-[#1D4A3F] mt-0.5" id="tiles-count-display">
-                    {requiredTilesCount} pcs
-                  </p>
+
+                {/* 2. Required Tiles Count Display */}
+                <div className="bg-[#207868]/5 p-3.5 rounded-xl border border-[#207868]/15 shadow-xs flex flex-col justify-between">
+                  <div>
+                    <span className="block text-[9px] font-extrabold text-[#207868] uppercase tracking-wider">Required Tiles</span>
+                    <p className="text-sm sm:text-base font-black text-[#196053] mt-0.5" id="tiles-count-display">
+                      {requiredTilesCount} pcs
+                    </p>
+                  </div>
+                  <span className="text-[10px] text-[#207868] font-black mt-1.5 block">
+                    Net Count Estimator
+                  </span>
+                </div>
+
+                {/* 3. Wastage Buffer (10%) */}
+                <div className="bg-white p-3.5 rounded-xl border border-neutral-200 shadow-xs flex flex-col justify-between">
+                  <div>
+                    <span className="block text-[9px] font-extrabold text-neutral-400 uppercase tracking-wider">With +10% Waste</span>
+                    <p className="text-sm sm:text-base font-black text-neutral-900 mt-0.5">
+                      {Math.ceil(requiredTilesCount * 1.1)} pcs
+                    </p>
+                  </div>
+                  <span className="text-[10px] text-amber-600 font-extrabold mt-1.5 block">
+                    Recommended Buffer
+                  </span>
+                </div>
+
+                {/* 4. Aspect Ratio & Texture Type */}
+                <div className="bg-white p-3.5 rounded-xl border border-neutral-200 shadow-xs flex flex-col justify-between">
+                  <div>
+                    <span className="block text-[9px] font-extrabold text-neutral-400 uppercase tracking-wider">Tile Spec</span>
+                    <p className="text-sm sm:text-base font-black text-neutral-900 mt-0.5 truncate">
+                      {selectedTileSize === "2x2" ? "2′ × 2′ Standard" : "1′ × 2′ Subway"}
+                    </p>
+                  </div>
+                  <span className="text-[10px] text-neutral-500 font-bold mt-1.5 block truncate">
+                    {(selectedTile?.category || "pattern").toUpperCase()} · {selectedTileSize === "2x2" ? "60×60 cm" : "30×60 cm"}
+                  </span>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Built-in Preset Tile Catalog (convenient selection underneath visualizer) */}
+          {/* Built-in Preset Tile Catalog (highly readable cards with full names & descriptions) */}
           <div className="bg-[#FAF9F6] rounded-2xl p-5 shadow-sm border border-neutral-200/40 space-y-4" id="visualizer-catalog-panel">
-            <h3 className="text-sm font-extrabold text-neutral-900 tracking-tight flex items-center gap-2">
-              <Check className="w-4 h-4 text-[#207868]" />
-              Choose Built-in Presets
-            </h3>
+            <div>
+              <h3 className="text-sm font-extrabold text-neutral-900 tracking-tight flex items-center gap-2">
+                <Check className="w-4 h-4 text-[#207868]" />
+                Choose Built-in Presets
+              </h3>
+              <p className="text-[11px] text-neutral-500 font-medium mt-0.5">
+                Select a traditional or modern pre-designed layout texture to visualise perspective surfaces instantly.
+              </p>
+            </div>
             
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3" id="expanded-tile-grid">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4" id="expanded-tile-grid">
               {tiles.map((tile) => (
                 <button
                   key={tile.id}
                   onClick={() => setSelectedTileId(tile.id)}
-                  className={`relative p-2 rounded-xl border text-left bg-white transition-all overflow-hidden flex flex-col justify-between aspect-square group cursor-pointer ${
+                  className={`relative p-3 rounded-2xl border text-left bg-white transition-all hover:shadow-md flex flex-col justify-between gap-3 group cursor-pointer ${
                     selectedTileId === tile.id
                       ? "border-[#1D4A3F] ring-2 ring-[#207868]/15 shadow-md"
                       : "border-neutral-200/80 hover:border-neutral-350"
                   }`}
                   id={`expanded-tile-${tile.id}`}
                 >
-                  <div className="relative w-full aspect-square rounded-lg overflow-hidden bg-neutral-50 border border-neutral-100">
+                  <div className="relative w-full aspect-video rounded-xl overflow-hidden bg-neutral-100 border border-neutral-150 shrink-0">
                     <img
                       src={tile.imageUrl}
                       alt={tile.name}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
-                    <span className="absolute bottom-1 right-1 bg-white/95 backdrop-blur-sm px-1.5 py-0.5 rounded text-[8px] font-bold text-neutral-700 border border-neutral-150">
-                      {tile.widthMm === 600 && tile.heightMm === 600 ? "60x60 cm" : "30x60 cm"}
+                    <span className="absolute bottom-2 right-2 bg-[#121824]/90 backdrop-blur-xs px-2 py-0.5 rounded-md text-[9px] font-black text-white border border-neutral-700/35">
+                      {tile.widthMm === 600 && tile.heightMm === 600 ? "60x60 cm" : tile.widthMm === 200 ? "20x120 cm" : "30x60 cm"}
                     </span>
                   </div>
-                  <div className="mt-1.5 overflow-hidden">
-                    <span className="block text-[8px] text-[#207868] font-bold uppercase tracking-wider">{tile.category}</span>
-                    <h4 className="text-[10px] font-bold text-neutral-900 truncate leading-none mt-0.5">{tile.name}</h4>
+
+                  <div className="flex-1 flex flex-col justify-between">
+                    <div>
+                      <span className="inline-block text-[9px] bg-[#1D4A3F]/10 text-[#196053] px-2 py-0.5 rounded-full font-black uppercase tracking-wider">
+                        {tile.category}
+                      </span>
+                      <h4 className="text-[12.5px] font-black text-neutral-900 leading-tight mt-1 group-hover:text-[#196053] transition-colors">{tile.name}</h4>
+                      <p className="text-[10.5px] text-neutral-500 font-semibold leading-normal mt-1 italic">
+                        Style: {tile.colorStyle}
+                      </p>
+                    </div>
                   </div>
+
                   {selectedTileId === tile.id && (
-                    <div className="absolute top-1.5 left-1.5 bg-[#1D4A3F] text-white rounded-full p-0.5 shadow-md">
-                      <Check className="w-3 h-3" />
+                    <div className="absolute top-4 left-4 bg-[#1D4A3F] text-white rounded-full p-1 shadow-md z-10 border border-white/20">
+                      <Check className="w-3.5 h-3.5" />
                     </div>
                   )}
                 </button>

@@ -85,6 +85,9 @@ export default function VisualizationCanvas({
   const [isDraggingSlider, setIsDraggingSlider] = useState<boolean>(false);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [downloadedImage, setDownloadedImage] = useState<string | null>(null);
+  const [isUHDSelected, setIsUHDSelected] = useState<boolean>(false);
+  const [userEmail, setUserEmail] = useState<string>("");
+  const [emailSubmitted, setEmailSubmitted] = useState<boolean>(false);
 
   // Load the room image
   useEffect(() => {
@@ -529,18 +532,21 @@ export default function VisualizationCanvas({
     setIsDraggingSlider(false);
   };
 
-  const handleDownload = () => {
+  const handleDownload = (isUHD: boolean = false) => {
     const roomImg = roomImageRef.current;
     if (!roomImg) return;
 
+    setIsUHDSelected(isUHD);
     setIsGenerating(true);
+    setEmailSubmitted(false);
+    setUserEmail("");
 
-    // Run heavy processing in a brief timeout to let the UI update and render the processing spinner
+    // Run processing in a brief timeout to let the UI update and render the processing spinner
     setTimeout(() => {
       try {
-        // exact 8K UHD widescreen resolution (7680 x 4320)
-        const width = 7680;
-        const height = 4320;
+        // Dynamic Resolution: 8K UHD widescreen (7680x4320) or high-speed responsive direct HD (natural room dimensions)
+        const width = isUHD ? 7680 : (roomImg.naturalWidth || 1600);
+        const height = isUHD ? 4320 : (roomImg.naturalHeight || 1200);
 
         // Create high-res offscreen canvas
         const exportCanvas = document.createElement("canvas");
@@ -704,13 +710,13 @@ export default function VisualizationCanvas({
           ctx.drawImage(roomOverlayImg, 0, 0, width, height);
         }
 
-        // Trigger automatic high-definition file download
+        // Trigger automatic file download
         const dataUrl = exportCanvas.toDataURL("image/png");
         setDownloadedImage(dataUrl);
 
         try {
           const link = document.createElement("a");
-          link.download = `tilevista-render-8k.png`;
+          link.download = isUHD ? "tilevista-render-8k-uhd.png" : "tilevista-render-hd.png";
           link.href = dataUrl;
           link.click();
         } catch (downloadErr) {
@@ -747,13 +753,23 @@ export default function VisualizationCanvas({
           )}
 
           <button
-            onClick={handleDownload}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#207868] hover:bg-[#196053] rounded-lg text-xs font-extrabold text-white transition-all active:scale-95 cursor-pointer shadow-sm ml-2"
-            title="Download 8K HD Image"
-            id="download-canvas-btn"
+            onClick={() => handleDownload(false)}
+            className="flex items-center gap-1 px-3 py-1.5 bg-[#FFAA47] hover:bg-[#e09134] text-neutral-950 rounded-lg text-xs font-black transition-all active:scale-95 cursor-pointer shadow-sm ml-2"
+            title="Instant direct HD download"
+            id="download-hd-btn"
           >
             <Download className="w-3.5 h-3.5" />
-            <span>Download 8K PNG</span>
+            <span>Download HD (Fast)</span>
+          </button>
+
+          <button
+            onClick={() => handleDownload(true)}
+            className="flex items-center gap-1 px-3 py-1.5 bg-[#207868] hover:bg-[#196053] text-white rounded-lg text-xs font-black transition-all active:scale-95 cursor-pointer shadow-sm"
+            title="Premium 8K Ultra HD render"
+            id="download-8k-btn"
+          >
+            <Download className="w-3.5 h-3.5 animate-bounce" />
+            <span>8K Ultra HD</span>
           </button>
         </div>
       </div>
@@ -805,16 +821,16 @@ export default function VisualizationCanvas({
         )}
       </div>
 
-      {/* 8K Render Complete - Touch & Save Instruction Modal for Mobile & Fallbacks */}
+      {/* 8K/HD Render Complete - Touch & Save Instruction Modal for Mobile & Fallbacks */}
       {downloadedImage && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/85 backdrop-blur-xs" id="download-success-modal">
-          <div className="bg-[#FAF9F6] rounded-3xl p-6 md:p-8 max-w-lg w-full border border-neutral-250 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-200">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/85 backdrop-blur-xs overflow-y-auto" id="download-success-modal">
+          <div className="bg-[#FAF9F6] rounded-3xl p-5 md:p-7 max-w-lg w-full border border-neutral-250 shadow-2xl space-y-4 animate-in fade-in zoom-in duration-200 my-8">
             <div className="flex justify-between items-start">
               <div>
-                <span className="text-[9px] bg-emerald-500/10 text-[#196053] px-2.5 py-1 rounded-full font-black uppercase tracking-wide">
-                  8K UHD Render Ready
+                <span className={`text-[9px] px-2.5 py-1 rounded-full font-black uppercase tracking-wide ${isUHDSelected ? "bg-emerald-500/10 text-[#196053]" : "bg-[#FFAA47]/10 text-[#D06F00]"}`}>
+                  {isUHDSelected ? "8K Ultra HD Render Ready" : "Direct HD Download Ready"}
                 </span>
-                <h3 className="text-base sm:text-lg font-black text-neutral-900 mt-2">Your Space is Visualised!</h3>
+                <h3 className="text-base sm:text-lg font-black text-neutral-900 mt-1">Your Space is Visualised!</h3>
               </div>
               <button
                 onClick={() => setDownloadedImage(null)}
@@ -824,39 +840,87 @@ export default function VisualizationCanvas({
               </button>
             </div>
 
-            <div className="relative border border-neutral-200 rounded-2xl overflow-hidden shadow-inner max-h-[280px] sm:max-h-[320px] flex items-center justify-center bg-neutral-950">
+            <div className="relative border border-neutral-200 rounded-2xl overflow-hidden shadow-inner h-[180px] sm:h-[220px] flex items-center justify-center bg-neutral-950">
               <img
                 src={downloadedImage}
-                alt="8K HD Render Preview"
-                className="max-w-full max-h-[280px] sm:max-h-[320px] object-contain select-none"
+                alt="HD Render Preview"
+                className="max-w-full max-h-full object-contain select-none"
               />
             </div>
 
-            <div className="bg-[#1D4A3F]/5 rounded-2xl p-4 border border-[#1D4A3F]/10 text-[11px] sm:text-xs text-neutral-700 space-y-1.5">
+            {/* Quick Mobile save instructions */}
+            <div className="bg-[#1D4A3F]/5 rounded-xl p-3 border border-[#1D4A3F]/10 text-[10.5px] text-neutral-700 space-y-1">
               <p className="font-extrabold text-[#1D4A3F] flex items-center gap-1.5">
-                <span>📱 Device Save Instructions</span>
+                <span>📱 Mobile Quick Save</span>
               </p>
               <p className="leading-relaxed font-medium text-neutral-600">
-                If the file download did not start automatically:
-                <strong className="block mt-1 text-neutral-900 font-bold">
-                  Touch and hold (long press) the image preview above, then choose "Save to Photos" or "Download Image".
-                </strong>
+                Long press (touch & hold) the preview image above to save directly to your photos.
               </p>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-2.5 pt-1">
+            {/* NEXT STEP OPTIONS */}
+            <div className="border-t border-neutral-200/80 pt-3 space-y-3">
+              <h4 className="text-xs font-extrabold text-neutral-800 tracking-tight">✨ Choose Your Next Step:</h4>
+              
+              <div className="grid grid-cols-1 gap-2">
+                {/* Simulated Email Specification Form */}
+                <div className="bg-white p-3 rounded-xl border border-neutral-200 shadow-xs space-y-2">
+                  <span className="block text-[9px] font-black uppercase text-neutral-500 tracking-wider">Option A: Email Design Specification Specs</span>
+                  {!emailSubmitted ? (
+                    <div className="flex gap-2">
+                      <input
+                        type="email"
+                        placeholder="yourname@email.com"
+                        value={userEmail}
+                        onChange={(e) => setUserEmail(e.target.value)}
+                        className="flex-1 text-[11px] font-bold border border-neutral-250 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#207868] text-neutral-800 bg-neutral-50"
+                      />
+                      <button
+                        onClick={() => {
+                          if (userEmail.trim()) {
+                            setEmailSubmitted(true);
+                          }
+                        }}
+                        className="bg-[#207868] hover:bg-[#196053] text-white px-3 py-1.5 rounded-lg text-[10px] font-black transition-all active:scale-95 whitespace-nowrap cursor-pointer"
+                      >
+                        Get Specs
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="text-[10.5px] font-bold text-emerald-600 bg-emerald-50 p-2 rounded-lg border border-emerald-100">
+                      ✅ Design specifications & 3D tiles breakdown successfully simulated and sent to: <span className="underline">{userEmail}</span>!
+                    </p>
+                  )}
+                </div>
+
+                {/* Saima Biva Designer Critique Link */}
+                <a
+                  href="https://saimabiva.pro.bd/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="bg-[#FFAA47]/10 hover:bg-[#FFAA47]/25 text-[#D06F00] p-3 rounded-xl border border-[#FFAA47]/30 text-left block transition-all group"
+                >
+                  <span className="block text-[9px] font-black uppercase tracking-wider text-[#A05000]">Option B: Expert Design Review</span>
+                  <p className="text-[11.5px] font-extrabold mt-1 group-hover:underline">
+                    💬 Request a free professional critique from Saima Biva (Rajshahi University) &rarr;
+                  </p>
+                </a>
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-1 border-t border-neutral-200/50">
               <button
                 onClick={() => setDownloadedImage(null)}
-                className="w-full sm:w-1/3 bg-neutral-200/80 hover:bg-neutral-250 text-neutral-700 py-3 rounded-xl text-xs font-extrabold transition-all active:scale-95 cursor-pointer"
+                className="w-1/3 bg-neutral-200/80 hover:bg-neutral-250 text-neutral-700 py-3 rounded-xl text-xs font-extrabold transition-all active:scale-95 cursor-pointer"
               >
-                Done
+                Close
               </button>
               <a
                 href={downloadedImage}
-                download="tilevista-render-8k.png"
-                className="w-full sm:w-2/3 bg-[#207868] hover:bg-[#196053] text-white py-3 rounded-xl text-xs font-extrabold text-center block transition-all active:scale-95 shadow-md"
+                download={isUHDSelected ? "tilevista-render-8k-uhd.png" : "tilevista-render-hd.png"}
+                className="w-2/3 bg-[#207868] hover:bg-[#196053] text-white py-3 rounded-xl text-xs font-extrabold text-center block transition-all active:scale-95 shadow-md font-sans"
               >
-                Download Direct File
+                Download File
               </a>
             </div>
           </div>
