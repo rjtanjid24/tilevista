@@ -3,6 +3,51 @@ import { Point2D, EditorControlsState } from "../types";
 import { drawTriangleTexture, interpolateQuad, isConvexQuad } from "../utils/geometryUtils";
 import { Maximize, HelpCircle, Eye, Download } from "lucide-react";
 
+/**
+ * Creates a thresholded binary mask from the overlay image.
+ * Solid elements like furniture, frames, and windows (which have alpha > 150)
+ * are mapped to fully opaque black, while soft shadows (alpha <= 150) or empty space
+ * are mapped to fully transparent.
+ * This is used for perfect destination-out alpha masking so tiles don't bleed under furniture.
+ */
+function createThresholdedMask(
+  sourceImg: HTMLImageElement,
+  width: number,
+  height: number
+): HTMLCanvasElement | HTMLImageElement {
+  const maskCanvas = document.createElement("canvas");
+  maskCanvas.width = width;
+  maskCanvas.height = height;
+  const mCtx = maskCanvas.getContext("2d");
+  if (!mCtx) return sourceImg;
+
+  mCtx.drawImage(sourceImg, 0, 0, width, height);
+
+  try {
+    const imgData = mCtx.getImageData(0, 0, width, height);
+    const data = imgData.data;
+    for (let i = 0; i < data.length; i += 4) {
+      const alpha = data[i + 3];
+      // Solid elements (furniture, window frame, wall frames) have high opacity (alpha > 150).
+      // Soft ambient ground shadows have low opacity (alpha <= 150).
+      if (alpha > 150) {
+        data[i] = 0;
+        data[i + 1] = 0;
+        data[i + 2] = 0;
+        data[i + 3] = 255;
+      } else {
+        data[i + 3] = 0;
+      }
+    }
+    mCtx.putImageData(imgData, 0, 0);
+    return maskCanvas;
+  } catch (e) {
+    // Graceful fallback for local dev sandbox/cross-origin limits
+    console.warn("Mask thresholding failed, using original overlay instead", e);
+    return sourceImg;
+  }
+}
+
 interface VisualizationCanvasProps {
   roomImageSrc: string | null;
   roomOverlaySrc?: string | null;
@@ -197,6 +242,17 @@ export default function VisualizationCanvas({
               tBL.x, tBL.y
             );
           }
+        }
+
+        // Apply alpha-masking using the thresholded room overlay mask
+        // This ensures the tile pattern is rendered exclusively behind furniture, windows, and frames
+        const roomOverlayImg = roomOverlayRef.current;
+        if (roomOverlayImg && tCtx) {
+          const mask = createThresholdedMask(roomOverlayImg, dimensions.width, dimensions.height);
+          tCtx.save();
+          tCtx.globalCompositeOperation = "destination-out";
+          tCtx.drawImage(mask, 0, 0, dimensions.width, dimensions.height);
+          tCtx.restore();
         }
 
         // Apply appearance styling (opacity, brightness, contrast)
@@ -559,6 +615,17 @@ export default function VisualizationCanvas({
                 tBL.x, tBL.y
               );
             }
+          }
+
+          // Apply alpha-masking using the thresholded room overlay mask
+          // This ensures the tile pattern is rendered exclusively behind furniture, windows, and frames
+          const roomOverlayImg = roomOverlayRef.current;
+          if (roomOverlayImg && tCtx) {
+            const mask = createThresholdedMask(roomOverlayImg, width, height);
+            tCtx.save();
+            tCtx.globalCompositeOperation = "destination-out";
+            tCtx.drawImage(mask, 0, 0, width, height);
+            tCtx.restore();
           }
 
           // Render tiles to master context with opacity adjustments

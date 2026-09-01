@@ -150,6 +150,39 @@ export function generateProceduralRoomOverlay(): string {
   // Ensure background is fully transparent
   ctx.clearRect(0, 0, 1024, 768);
 
+  // 0. Draw window glass sky and painting artwork as part of overlay
+  // This guarantees they are solid features in the mask that wall tiles render behind
+  
+  // Window glass sky
+  const skyGrad = ctx.createLinearGradient(260, 80, 260, 340);
+  skyGrad.addColorStop(0, "#BAE6FD");
+  skyGrad.addColorStop(0.5, "#E0F2FE");
+  skyGrad.addColorStop(1, "#FFEDD5");
+  ctx.fillStyle = skyGrad;
+  ctx.fillRect(265, 85, 210, 250);
+
+  // Painting artwork
+  ctx.fillStyle = "#EADEC9"; // Art canvas
+  ctx.fillRect(535, 105, 150, 100);
+  
+  // Abstract watercolor brush shapes
+  ctx.fillStyle = "#C2A383"; // Sand texture circle
+  ctx.beginPath();
+  ctx.arc(610, 155, 30, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = "#2D5A27"; // Dark terracotta green accent
+  ctx.beginPath();
+  ctx.ellipse(585, 165, 15, 25, Math.PI / 6, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = "#4D3627";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(560, 175);
+  ctx.bezierCurveTo(590, 160, 620, 190, 660, 170);
+  ctx.stroke();
+
   // A. Draw Window Frame & Dividers (Left wall)
   ctx.save();
   ctx.fillStyle = "#2D2D2F"; // High-quality iron frame
