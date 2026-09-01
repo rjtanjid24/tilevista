@@ -7,11 +7,18 @@ import Header from "./components/Header";
 import VisualizationCanvas from "./components/VisualizationCanvas";
 import { Upload, Plus, Heart, HelpCircle, Check, Sparkles } from "lucide-react";
 
-const INITIAL_POINTS: Point2D[] = [
-  { x: 0.18, y: 0.62, label: "top-left" },
-  { x: 0.82, y: 0.62, label: "top-right" },
-  { x: 0.98, y: 0.95, label: "bottom-right" },
-  { x: 0.02, y: 0.95, label: "bottom-left" },
+const FLOOR_POINTS: Point2D[] = [
+  { x: 0.18, y: 0.62, label: "floor-TL" },
+  { x: 0.82, y: 0.62, label: "floor-TR" },
+  { x: 0.98, y: 0.95, label: "floor-BR" },
+  { x: 0.02, y: 0.95, label: "floor-BL" },
+];
+
+const WALL_POINTS: Point2D[] = [
+  { x: 0.18, y: 0.01, label: "wall-TL" },
+  { x: 0.82, y: 0.01, label: "wall-TR" },
+  { x: 0.82, y: 0.61, label: "wall-BR" },
+  { x: 0.18, y: 0.61, label: "wall-BL" },
 ];
 
 const DEFAULT_CONTROLS: EditorControlsState = {
@@ -40,7 +47,7 @@ export default function App() {
   const [roomImage, setRoomImage] = useState<string | null>(null);
   const [tiles, setTiles] = useState<TileData[]>([]);
   const [selectedTileId, setSelectedTileId] = useState<string>("majolica-blue");
-  const [points, setPoints] = useState<Point2D[]>(INITIAL_POINTS);
+  const [points, setPoints] = useState<Point2D[]>(FLOOR_POINTS);
   const [controls, setControls] = useState<EditorControlsState>(DEFAULT_CONTROLS);
 
   // Layout states
@@ -65,7 +72,7 @@ export default function App() {
     const demoRoom = generateProceduralRoomImage();
     setRoomImage(demoRoom);
     setSelectedTileId("majolica-blue");
-    setPoints(INITIAL_POINTS);
+    setPoints(FLOOR_POINTS);
   }, []);
 
   const selectedTile = tiles.find((t) => t.id === selectedTileId) || null;
@@ -82,12 +89,13 @@ export default function App() {
     }));
   }, [groutColorIndex]);
 
-  // Sync surfaceType with toggle
+  // Sync surfaceType with toggle and reset perspective coordinate anchors
   useEffect(() => {
     setControls((prev) => ({
       ...prev,
       surfaceType: isWall ? "wall" : "floor",
     }));
+    setPoints(isWall ? WALL_POINTS : FLOOR_POINTS);
   }, [isWall]);
 
   // Sync tile sizes inside visualization engine
@@ -133,7 +141,7 @@ export default function App() {
       reader.onload = (event) => {
         if (event.target?.result) {
           setRoomImage(event.target.result as string);
-          setPoints(INITIAL_POINTS);
+          setPoints(FLOOR_POINTS);
           triggerNotification("Room image uploaded successfully!");
         }
       };
@@ -188,7 +196,7 @@ export default function App() {
     setSelectedTileSize("2x2");
     setGroutColorIndex(30);
     setIsWall(false);
-    setPoints(INITIAL_POINTS);
+    setPoints(FLOOR_POINTS);
     setControls(DEFAULT_CONTROLS);
     triggerNotification("New workspace initialized!");
   };
@@ -209,11 +217,7 @@ export default function App() {
   return (
     <div className="bg-[#B1D4CC] min-h-screen flex flex-col font-sans selection:bg-[#1D4A3F] selection:text-white" id="tilevista-app">
       {/* 1. Header with English Navigation & Custom Branding */}
-      <Header
-        onReset={handleResetWorkspace}
-        onSave={handleSaveWorkspace}
-        onShare={handleShareWorkspace}
-      />
+      <Header />
 
       {/* Floating alert notifications */}
       {showNotification && (
@@ -223,11 +227,11 @@ export default function App() {
         </div>
       )}
 
-      {/* 2. Responsive 3-Column Studio Workspace Grid */}
-      <main className="flex-1 w-full max-w-[1440px] mx-auto p-4 sm:p-5 md:p-6 lg:p-8 grid grid-cols-1 md:grid-cols-12 gap-5 lg:gap-6 items-start" id="tilevista-editor-stage">
+      {/* 2. Responsive 2-Column Studio Workspace Grid */}
+      <main className="flex-1 w-full max-w-[1440px] mx-auto p-4 sm:p-5 md:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-6 items-start" id="tilevista-editor-stage">
         
-        {/* ================= COLUMN 1: DESIGN PANEL (Sidebar Controls) ================= */}
-        <section className="md:col-span-4 lg:col-span-3 space-y-5 flex flex-col" id="col-design-panel">
+        {/* ================= COLUMN 1: DESIGN PANEL (Sidebar Controls - spans 4 cols on lg screens) ================= */}
+        <section className="lg:col-span-4 space-y-5 flex flex-col" id="col-design-panel">
           
           <div className="flex items-center justify-between px-1" id="panel-title-bar">
             <h2 className="text-xl font-extrabold text-neutral-900 tracking-tight flex items-center gap-2">
@@ -239,50 +243,7 @@ export default function App() {
           <div className="bg-[#FAF9F6] rounded-2xl p-5 shadow-sm border border-neutral-200/40 space-y-4" id="step-1-card">
             <div className="bg-[#FFAA47]/15 text-[#D06F00] px-3.5 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5" id="step-1-eyebrow">
               <span className="w-2 h-2 rounded-full bg-[#FFAA47]" />
-              Step 1: Define Space
-            </div>
-
-            {/* Toggle tabs for file upload vs dimensions */}
-            <div className="grid grid-cols-2 gap-1.5 bg-neutral-100 p-1 rounded-xl" id="tab-controls">
-              <button
-                className="py-2 text-xs font-bold rounded-lg transition-all text-neutral-800 bg-white shadow-sm cursor-default"
-                id="tab-photo-btn"
-              >
-                Upload Photo
-              </button>
-              <button
-                onClick={() => triggerNotification("Adjust space limits below to auto-calculate tile quantity")}
-                className="py-2 text-xs font-bold rounded-lg text-neutral-500 hover:text-neutral-800 transition-all cursor-pointer"
-                id="tab-dimension-btn"
-              >
-                Dimensions
-              </button>
-            </div>
-
-            {/* Room upload container block */}
-            <div className="border border-neutral-200 bg-white rounded-xl p-3 flex items-center gap-3" id="photo-uploader-box">
-              <div className="relative w-12 h-12 bg-neutral-100 rounded-lg overflow-hidden border border-neutral-150 shrink-0" id="uploader-preview">
-                {roomImage ? (
-                  <img src={roomImage} alt="Room" className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-neutral-400">
-                    <Upload className="w-4 h-4" />
-                  </div>
-                )}
-              </div>
-              <div className="flex-1 overflow-hidden">
-                <span className="block text-[9px] font-bold text-neutral-400 uppercase tracking-wider">Room Context</span>
-                <span className="block text-xs font-bold text-neutral-800 truncate">Room Image</span>
-                <label className="text-[10px] text-[#207868] font-bold underline cursor-pointer mt-0.5 block hover:text-[#165549]">
-                  Choose raw photo
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleUploadRoomImage}
-                    className="hidden"
-                  />
-                </label>
-              </div>
+              Step 1: Room Dimensions
             </div>
 
             {/* Room dimension fields (Width in feet, Length in feet) */}
@@ -313,7 +274,7 @@ export default function App() {
 
             {/* Room update trigger button */}
             <button
-              onClick={() => triggerNotification("Dimensions updated successfully!")}
+              onClick={() => triggerNotification("Room dimensions updated successfully!")}
               className="w-full bg-[#2A7B6B] hover:bg-[#1D5E51] text-white py-2.5 rounded-xl text-xs font-extrabold shadow-sm transition-all active:scale-95 cursor-pointer"
               id="room-update-btn"
             >
@@ -321,47 +282,24 @@ export default function App() {
             </button>
           </div>
 
-          {/* Step 2: Tile Selection */}
+          {/* Step 2: Tile Selection & Upload */}
           <div className="bg-[#FAF9F6] rounded-2xl p-5 shadow-sm border border-neutral-200/40 space-y-4" id="step-2-card">
             <div className="bg-[#FFAA47]/15 text-[#D06F00] px-3.5 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-[#FFAA47]" />
-              Step 2: Choose Design
+              Step 2: Upload Custom Design
             </div>
 
             {/* Dash block for custom upload */}
-            <label className="border-2 border-dashed border-neutral-300 rounded-xl p-3 flex flex-col items-center justify-center text-center cursor-pointer hover:border-neutral-400 bg-white transition-all text-neutral-500" id="tile-upload-box">
+            <label className="border-2 border-dashed border-neutral-300 rounded-xl p-4 flex flex-col items-center justify-center text-center cursor-pointer hover:border-neutral-400 bg-white transition-all text-neutral-500" id="tile-upload-box">
               <input
                 type="file"
                 accept="image/*"
                 onChange={handleUploadCustomTile}
                 className="hidden"
               />
-              <Upload className="w-5 h-5 text-neutral-400 mb-1" />
+              <Upload className="w-5 h-5 text-neutral-400 mb-1.5" />
               <span className="text-xs font-bold text-neutral-700">Upload Custom Tile</span>
             </label>
-
-            {/* Miniature list selection for visual consistency */}
-            <div className="grid grid-cols-4 gap-2" id="miniature-tile-catalog">
-              {tiles.slice(0, 4).map((tile) => (
-                <button
-                  key={tile.id}
-                  onClick={() => setSelectedTileId(tile.id)}
-                  className={`relative aspect-square rounded-lg overflow-hidden border transition-all cursor-pointer ${
-                    selectedTileId === tile.id
-                      ? "border-[#1D4A3F] ring-2 ring-[#207868]/30"
-                      : "border-neutral-200 hover:border-neutral-300"
-                  }`}
-                  title={tile.name}
-                >
-                  <img src={tile.imageUrl} alt={tile.name} className="w-full h-full object-cover" />
-                  {selectedTileId === tile.id && (
-                    <div className="absolute inset-0 bg-[#207868]/15 flex items-center justify-center">
-                      <div className="w-4 h-4 rounded-full bg-[#207868] text-white flex items-center justify-center text-[8px] font-bold">✓</div>
-                    </div>
-                  )}
-                </button>
-              ))}
-            </div>
 
             {/* Tile size selector buttons "2x2" and "1x2 feet" */}
             <div className="space-y-1.5" id="tile-size-selector">
@@ -400,6 +338,33 @@ export default function App() {
               Step 3: Setup & Adjustments
             </div>
 
+            {/* Wall vs Floor Radio buttons (explicit separate selectors) */}
+            <div className="space-y-1.5" id="surface-type-selector">
+              <label className="block text-[9px] font-extrabold text-neutral-500 uppercase">Surface Type</label>
+              <div className="grid grid-cols-2 gap-2 bg-white p-1 rounded-xl border border-neutral-200/60">
+                <label className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold cursor-pointer transition-all ${!isWall ? "bg-[#1D4A3F] text-white" : "text-neutral-600 hover:bg-neutral-100"}`}>
+                  <input
+                    type="radio"
+                    name="surface-type"
+                    checked={!isWall}
+                    onChange={() => setIsWall(false)}
+                    className="sr-only"
+                  />
+                  Floor Pattern
+                </label>
+                <label className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold cursor-pointer transition-all ${isWall ? "bg-[#1D4A3F] text-white" : "text-neutral-600 hover:bg-neutral-100"}`}>
+                  <input
+                    type="radio"
+                    name="surface-type"
+                    checked={isWall}
+                    onChange={() => setIsWall(true)}
+                    className="sr-only"
+                  />
+                  Wall Pattern
+                </label>
+              </div>
+            </div>
+
             {/* Grout color slider "Grout Color" */}
             <div className="space-y-1">
               <div className="flex justify-between items-center text-[9px] font-extrabold text-neutral-500 uppercase">
@@ -436,25 +401,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Surface type toggle "Wall or Floor?" */}
-            <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-neutral-200/60" id="wall-floor-toggle">
-              <span className="text-xs font-bold text-neutral-700">Wall or Floor?</span>
-              <button
-                onClick={() => setIsWall(!isWall)}
-                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                  isWall ? "bg-[#1D4A3F]" : "bg-neutral-300"
-                }`}
-                id="toggle-switch"
-                title={isWall ? "Currently Wall" : "Currently Floor"}
-              >
-                <span
-                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                    isWall ? "translate-x-5" : "translate-x-0"
-                  }`}
-                />
-              </button>
-            </div>
-
             {/* Button Apply Visuals */}
             <button
               onClick={() => triggerNotification("Visual calculations applied successfully!")}
@@ -466,32 +412,75 @@ export default function App() {
           </div>
         </section>
 
-        {/* ================= COLUMN 2: TILE CATALOG (Middle Selection) ================= */}
-        <section className="md:col-span-4 lg:col-span-3 space-y-5 flex flex-col" id="col-catalog-panel">
+        {/* ================= COLUMN 2: LIVE VISUALIZER & CATALOG (spans 8 cols on lg screens) ================= */}
+        <section className="lg:col-span-8 space-y-6 flex flex-col" id="col-results-panel">
           <div className="flex items-center justify-between px-1">
-            <h2 className="text-xl font-extrabold text-neutral-900 tracking-tight">Tile Catalog</h2>
+            <h2 className="text-xl font-extrabold text-neutral-900 tracking-tight">Live Visualizer</h2>
           </div>
 
-          <div className="bg-[#FAF9F6] rounded-2xl p-5 shadow-sm border border-neutral-200/40 space-y-4 flex-1" id="middle-catalog-card">
-            <div className="bg-[#FFAA47]/15 text-[#D06F00] px-3.5 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-[#FFAA47]" />
-              Tile Varieties
+          <div className="bg-[#FAF9F6] rounded-2xl p-5 shadow-sm border border-neutral-200/40 flex flex-col justify-between min-h-[500px]" id="visualization-canvas-card">
+            
+            {/* Embedded interactive perspective canvas */}
+            <div className="flex-1 w-full bg-neutral-950 rounded-xl overflow-hidden shadow-inner relative flex items-center justify-center min-h-[350px] sm:min-h-[400px]">
+              {roomImage ? (
+                <VisualizationCanvas
+                  roomImageSrc={roomImage}
+                  tilePatternSheet={tilePatternSheet}
+                  points={points}
+                  onPointsChange={setPoints}
+                  controls={controls}
+                  showComparisonSlider={false}
+                  comparisonProgress={50}
+                  showAfterOnly={false}
+                />
+              ) : (
+                <div className="text-center text-neutral-400 p-8 flex flex-col items-center">
+                  <div className="w-12 h-12 rounded-full bg-neutral-800 flex items-center justify-center mb-4 text-neutral-300">
+                    <Upload className="w-5 h-5" />
+                  </div>
+                  <p className="text-sm font-bold">Default room image loading...</p>
+                </div>
+              )}
             </div>
 
-            {/* Upload your design custom button box */}
-            <label className="border-2 border-dashed border-neutral-300 rounded-xl p-4 flex flex-col items-center justify-center text-center cursor-pointer hover:border-neutral-400 bg-white transition-all text-neutral-500 mb-2" id="catalog-upload-box">
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleUploadCustomTile}
-                className="hidden"
-              />
-              <Upload className="w-5 h-5 text-neutral-400 mb-1" />
-              <span className="text-xs font-bold text-neutral-700">Import Custom Design</span>
-            </label>
+            {/* Bottom calculation bar containing dimensions and order actions */}
+            <div className="mt-4 pt-4 border-t border-neutral-200/60 flex flex-col sm:flex-row items-center justify-between gap-4 px-2" id="results-footer-bar">
+              <div className="flex items-center gap-10" id="metrics-summary">
+                {/* Room Size Display */}
+                <div className="bg-white px-4 py-2.5 rounded-xl border border-neutral-200/60 shadow-xs">
+                  <span className="block text-[10px] font-extrabold text-neutral-400 uppercase tracking-wider">Room Area</span>
+                  <p className="text-lg font-black text-neutral-800 mt-0.5" id="size-metric-display">
+                    {totalAreaSqFt} sq ft ({roomLengthFt} x {roomWidthFt} ft)
+                  </p>
+                </div>
+                {/* Required Tiles Count Display */}
+                <div className="bg-white px-4 py-2.5 rounded-xl border border-neutral-200/60 shadow-xs">
+                  <span className="block text-[10px] font-extrabold text-neutral-400 uppercase tracking-wider">Estimated Tiles</span>
+                  <p className="text-lg font-black text-[#1D4A3F] mt-0.5" id="tiles-count-display">
+                    {requiredTilesCount} pcs
+                  </p>
+                </div>
+              </div>
 
-            {/* Expanded elegant Grid of Tile choices with categories and labels */}
-            <div className="grid grid-cols-2 gap-3 max-h-[460px] overflow-y-auto pr-1" id="expanded-tile-grid">
+              {/* Order action button */}
+              <button
+                onClick={() => setShowOrderModal(true)}
+                className="w-full sm:w-auto px-8 py-3 bg-[#1D4A3F] hover:bg-[#165549] rounded-xl text-sm font-extrabold text-white transition-all shadow-md active:scale-95 cursor-pointer"
+                id="order-now-btn"
+              >
+                Generate Order Quotation
+              </button>
+            </div>
+          </div>
+
+          {/* Built-in Preset Tile Catalog (convenient selection underneath visualizer) */}
+          <div className="bg-[#FAF9F6] rounded-2xl p-5 shadow-sm border border-neutral-200/40 space-y-4" id="visualizer-catalog-panel">
+            <h3 className="text-sm font-extrabold text-neutral-900 tracking-tight flex items-center gap-2">
+              <Check className="w-4 h-4 text-[#207868]" />
+              Choose Built-in Presets
+            </h3>
+            
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3" id="expanded-tile-grid">
               {tiles.map((tile) => (
                 <button
                   key={tile.id}
@@ -524,68 +513,6 @@ export default function App() {
                   )}
                 </button>
               ))}
-            </div>
-          </div>
-        </section>
-
-        {/* ================= COLUMN 3: LIVE VISUALIZER (Main Output Canvas) ================= */}
-        <section className="md:col-span-8 lg:col-span-6 space-y-5 flex flex-col" id="col-results-panel">
-          <div className="flex items-center justify-between px-1">
-            <h2 className="text-xl font-extrabold text-neutral-900 tracking-tight">Live Visualizer</h2>
-          </div>
-
-          <div className="bg-[#FAF9F6] rounded-2xl p-4 shadow-sm border border-neutral-200/40 flex flex-col justify-between min-h-[450px] sm:min-h-[500px]" id="visualization-canvas-card">
-            
-            {/* Embedded interactive perspective canvas */}
-            <div className="flex-1 w-full bg-neutral-950 rounded-xl overflow-hidden shadow-inner relative flex items-center justify-center min-h-[350px] sm:min-h-[400px]">
-              {roomImage ? (
-                <VisualizationCanvas
-                  roomImageSrc={roomImage}
-                  tilePatternSheet={tilePatternSheet}
-                  points={points}
-                  onPointsChange={setPoints}
-                  controls={controls}
-                  showComparisonSlider={false}
-                  comparisonProgress={50}
-                  showAfterOnly={false}
-                />
-              ) : (
-                <div className="text-center text-neutral-400 p-8 flex flex-col items-center">
-                  <div className="w-12 h-12 rounded-full bg-neutral-800 flex items-center justify-center mb-4 text-neutral-300">
-                    <Upload className="w-5 h-5" />
-                  </div>
-                  <p className="text-sm font-bold">Please upload a room image</p>
-                </div>
-              )}
-            </div>
-
-            {/* Bottom calculation bar containing dimensions and order actions */}
-            <div className="mt-4 pt-3 border-t border-neutral-200/60 flex flex-col sm:flex-row items-center justify-between gap-4 px-2" id="results-footer-bar">
-              <div className="flex items-center gap-6" id="metrics-summary">
-                {/* Room Size Display */}
-                <div>
-                  <span className="block text-[9px] font-extrabold text-neutral-400 uppercase tracking-wider">Room Area</span>
-                  <p className="text-sm font-black text-neutral-800 mt-0.5" id="size-metric-display">
-                    {roomLengthFt} x {roomWidthFt} ft
-                  </p>
-                </div>
-                {/* Required Tiles Count Display */}
-                <div>
-                  <span className="block text-[9px] font-extrabold text-neutral-400 uppercase tracking-wider">Estimated Tiles</span>
-                  <p className="text-sm font-black text-[#1D4A3F] mt-0.5" id="tiles-count-display">
-                    {requiredTilesCount} pcs
-                  </p>
-                </div>
-              </div>
-
-              {/* Order action button */}
-              <button
-                onClick={() => setShowOrderModal(true)}
-                className="w-full sm:w-auto px-6 py-2.5 bg-[#207868] hover:bg-[#196053] rounded-xl text-xs font-extrabold text-white transition-all shadow-sm active:scale-95 cursor-pointer"
-                id="order-now-btn"
-              >
-                Generate Order
-              </button>
             </div>
           </div>
         </section>
@@ -658,16 +585,25 @@ export default function App() {
         </div>
       )}
 
-      {/* 3. Personalized English academic footer dedicated to Ceramics & Sculpture Department */}
-      <footer className="bg-[#FAF9F6] border-t border-neutral-100 px-6 py-5 text-center text-neutral-400 text-xs mt-auto" id="tilevista-footer">
+      {/* 3. Personalized English academic footer dedicated to Ceramics & Sculpture Department with Portfolio link */}
+      <footer className="bg-white border-t border-neutral-150 px-6 py-6 text-center text-neutral-400 text-xs mt-auto" id="tilevista-footer">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-          <p>© 2026 TileVista. Visualise with Absolute Precision. Decide with Certainty.</p>
-          <div className="flex items-center gap-2 text-[11px] font-bold text-neutral-600" id="academic-credit">
+          <p className="text-neutral-500 font-medium">© 2026 TileVista. Visualise with Absolute Precision. Decide with Certainty.</p>
+          <div className="flex items-center gap-2 text-[11.5px] font-bold text-neutral-600" id="academic-credit">
             <span>Portfolio Project • Saima Biva</span>
             <span className="text-neutral-300">|</span>
             <span className="text-neutral-500 font-extrabold">Department of Ceramics & Sculpture</span>
             <span className="text-neutral-300">|</span>
-            <span className="text-neutral-600 bg-neutral-200/60 px-2 py-0.5 rounded border border-neutral-300/40">University of Rajshahi</span>
+            <span className="text-neutral-600">University of Rajshahi</span>
+            <span className="text-neutral-300">|</span>
+            <a
+              href="https://saimabiva.pro.bd/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[#207868] hover:text-[#165549] underline flex items-center gap-0.5"
+            >
+              saimabiva.pro.bd
+            </a>
           </div>
         </div>
       </footer>

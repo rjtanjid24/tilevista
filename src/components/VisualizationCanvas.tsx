@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState } from "react";
 import { Point2D, EditorControlsState } from "../types";
 import { drawTriangleTexture, interpolateQuad, isConvexQuad } from "../utils/geometryUtils";
-import { Maximize, HelpCircle, Eye } from "lucide-react";
+import { Maximize, HelpCircle, Eye, Download } from "lucide-react";
 
 interface VisualizationCanvasProps {
   roomImageSrc: string | null;
@@ -441,6 +441,20 @@ export default function VisualizationCanvas({
     setIsDraggingSlider(false);
   };
 
+  const handleDownload = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    try {
+      const dataUrl = canvas.toDataURL("image/png");
+      const link = document.createElement("a");
+      link.download = "tilevista-visualization.png";
+      link.href = dataUrl;
+      link.click();
+    } catch (err) {
+      console.error("Failed to download canvas", err);
+    }
+  };
+
   return (
     <div className="flex flex-col items-center justify-center w-full bg-neutral-900 rounded-2xl p-4 md:p-6 shadow-xl border border-neutral-800" id="visualizer-wrapper">
       {/* Upper info panel */}
@@ -450,18 +464,28 @@ export default function VisualizationCanvas({
           <span className="text-xs font-bold uppercase tracking-wider text-neutral-300">Live Editor Canvas</span>
         </div>
 
-        <div className="flex items-center gap-4 text-xs text-neutral-400" id="visualizer-hints">
+        <div className="flex items-center gap-3 text-xs text-neutral-400" id="visualizer-hints">
           {controls.detectionMode === "manual" ? (
             <span className="flex items-center gap-1 text-neutral-300 bg-neutral-800/80 px-2.5 py-1 rounded-md border border-neutral-700/50">
               <Maximize className="w-3.5 h-3.5 text-emerald-400" />
-              Drag the 4 corner handles to align perfectly
+              Drag corners to align
             </span>
           ) : (
             <span className="flex items-center gap-1">
               <Eye className="w-3.5 h-3.5 text-neutral-500" />
-              Perspective Auto Mapped
+              Auto Mapped
             </span>
           )}
+
+          <button
+            onClick={handleDownload}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#207868] hover:bg-[#196053] rounded-lg text-xs font-extrabold text-white transition-all active:scale-95 cursor-pointer shadow-sm ml-2"
+            title="Download Visual Image"
+            id="download-canvas-btn"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Download PNG</span>
+          </button>
         </div>
       </div>
 
