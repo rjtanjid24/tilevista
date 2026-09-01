@@ -54,14 +54,16 @@ export default function VisualizationCanvas({
   // Handle canvas sizing dynamically on window or container resize
   const handleResize = () => {
     if (!containerRef.current || !roomImageRef.current) return;
-    const containerWidth = containerRef.current.clientWidth;
+    const containerWidth = containerRef.current.clientWidth || 800;
     const img = roomImageRef.current;
 
-    // Calculate aspect-ratio bounds
+    // Calculate aspect-ratio bounds with fallbacks to avoid NaN division
+    const naturalWidth = img.naturalWidth || 1024;
+    const naturalHeight = img.naturalHeight || 768;
     const maxDisplayWidth = containerWidth;
-    const aspect = img.naturalHeight / img.naturalWidth;
-    const calculatedHeight = Math.min(600, maxDisplayWidth * aspect);
-    const calculatedWidth = calculatedHeight / aspect;
+    const aspect = naturalHeight / naturalWidth;
+    const calculatedHeight = Math.min(600, maxDisplayWidth * aspect) || 450;
+    const calculatedWidth = (calculatedHeight / aspect) || 600;
 
     setDimensions({
       width: Math.floor(calculatedWidth),

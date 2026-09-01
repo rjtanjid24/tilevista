@@ -72,7 +72,7 @@ export function solveAffineTransform(
  */
 export function drawTriangleTexture(
   ctx: CanvasRenderingContext2D,
-  img: HTMLCanvasElement | HTMLImageElement,
+  img: HTMLCanvasElement | HTMLImageElement | null,
   u0: number, v0: number,
   u1: number, v1: number,
   u2: number, v2: number,
@@ -80,6 +80,7 @@ export function drawTriangleTexture(
   x1: number, y1: number,
   x2: number, y2: number
 ) {
+  if (!img) return;
   const coeff = solveAffineTransform(u0, v0, u1, v1, u2, v2, x0, y0, x1, y1, x2, y2);
   if (!coeff) return;
 
