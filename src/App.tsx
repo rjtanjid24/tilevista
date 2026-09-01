@@ -593,24 +593,27 @@ export default function App() {
       )}
 
       {/* 3. Premium Elegant Device-Friendly Footer */}
-      <footer className="bg-neutral-950 border-t border-neutral-800/80 px-6 py-12 text-neutral-400 text-xs mt-auto relative overflow-hidden" id="tilevista-footer">
+      <footer className="bg-neutral-950 border-t border-neutral-800/80 px-6 py-10 text-neutral-400 text-xs mt-auto relative overflow-hidden" id="tilevista-footer">
         {/* Subtle decorative premium gradient bar at the top */}
         <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-emerald-500 via-teal-600 to-amber-500 opacity-80" />
 
-        <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center md:items-start gap-8 text-center md:text-left animate-fade-in" id="footer-container">
-          {/* Brand & Tagline - Left Column */}
-          <div className="space-y-2 max-w-md" id="footer-brand">
-            <h3 className="text-white font-black text-lg tracking-wider font-sans flex items-center justify-center md:justify-start gap-2">
-              <span className="bg-gradient-to-r from-[#72AD9C] to-[#FFAA47] text-transparent bg-clip-text">TileVista</span>
+        <div className="max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6 text-center md:text-left animate-fade-in" id="footer-container">
+          {/* Brand - Left Column: uses exact same logo icon grid and typography from header */}
+          <div className="flex items-center gap-2.5" id="footer-brand">
+            <div className="grid grid-cols-2 gap-0.5 w-6 h-6 shrink-0" id="footer-logo-icon-grid">
+              <div className="bg-[#F19A3E] rounded-[1px]" /> {/* Orange */}
+              <div className="bg-[#72AD9C] rounded-[1px]" /> {/* Teal */}
+              <div className="bg-[#566266] rounded-[1px]" /> {/* Grey */}
+              <div className="bg-[#EAD2AC] rounded-[1px]" /> {/* Beige */}
+            </div>
+            <h3 className="text-2xl font-black tracking-tight text-white font-sans" id="footer-tilevista-title">
+              TileVista
             </h3>
-            <p className="text-neutral-400 text-[13px] font-medium leading-relaxed">
-              Visualise with Absolute Precision. Decide with Certainty.
-            </p>
           </div>
 
           {/* Academic Portfolio Credit & Link - Right Column */}
-          <div className="space-y-2 flex flex-col items-center md:items-end" id="footer-academic">
-            <p className="text-neutral-300 text-[13px] font-bold tracking-wide">
+          <div className="flex flex-col items-center md:items-end" id="footer-academic">
+            <p className="text-neutral-300 text-[13px] sm:text-sm font-bold tracking-wide">
               A project by{" "}
               <a
                 href="https://saimabiva.pro.bd/"
@@ -626,9 +629,9 @@ export default function App() {
           </div>
         </div>
 
-        {/* Minimal Copyright border top */}
-        <div className="max-w-6xl mx-auto mt-8 pt-6 border-t border-neutral-900 text-center text-[11px] text-neutral-500">
-          © 2026 TileVista.
+        {/* Extended, elegant Copyright border top */}
+        <div className="max-w-4xl mx-auto mt-8 pt-6 border-t border-neutral-900 text-center text-xs text-neutral-500 tracking-wide">
+          © 2026 TileVista. Visualise with Absolute Precision. Decide with Certainty. All rights reserved.
         </div>
       </footer>
     </div>
